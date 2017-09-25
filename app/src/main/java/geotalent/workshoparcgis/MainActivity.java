@@ -4,6 +4,7 @@ import android.Manifest;
 import android.animation.Animator;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.location.Location;
@@ -47,6 +48,8 @@ import com.esri.core.tasks.na.RouteTask;
 
 import java.util.List;
 
+import static android.graphics.Color.*;
+
 public class MainActivity extends AppCompatActivity implements View.OnClickListener{
     MapView mapView = null;
     String mapService = "http://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer ";
@@ -54,7 +57,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     GraphicsLayer graphicsLayer = new GraphicsLayer();
     GraphicsLayer graphicsLayer2 = new GraphicsLayer();
     Graphic pg ;
-    PictureMarkerSymbol pinPic= new PictureMarkerSymbol(getResources().getDrawable(R.drawable.ic_pin_drop_black_24dp));;
+    PictureMarkerSymbol pinPic = null;
     Point pinStart,pinFinish;
     Button start,finish;
     ImageButton rounteDelete,rountingBtn,layerBtn;
@@ -96,6 +99,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 mainActivity();
                 break;
             case R.id.routePin_start:
+                pinPic = new PictureMarkerSymbol(getResources().getDrawable(R.drawable.ic_pin_drop_black_24dp));
                 mapView.setOnSingleTapListener(new OnSingleTapListener() {
                     @Override
                     public void onSingleTap(float v, float v1) {
@@ -110,6 +114,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 });
                 break;
             case R.id.routePin_finish:
+                pinPic = new PictureMarkerSymbol(getResources().getDrawable(R.drawable.ic_pin_drop_red_24dp));
                 mapView.setOnSingleTapListener(new OnSingleTapListener() {
                     @Override
                     public void onSingleTap(float v, float v1) {
@@ -142,6 +147,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         start.setOnClickListener(this);
         finish = (Button) findViewById(R.id.routePin_finish);
         finish.setOnClickListener(this);
+        FloatingActionButton fab = (FloatingActionButton)findViewById(R.id.fab);
+        fab.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
+        fab.setColorFilter(WHITE);
+        fab.setOnClickListener(this);
     }
 
     private Point convert(Point point){
