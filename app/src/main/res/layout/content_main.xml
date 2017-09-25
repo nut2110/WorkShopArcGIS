@@ -13,7 +13,6 @@
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
         mapoptions.MapType="Gray"
-        mapoptions.center="34.056215, -117.195668"
         mapoptions.ZoomLevel="16">
     </com.esri.android.map.MapView>
 

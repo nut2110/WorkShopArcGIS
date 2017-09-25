@@ -39,6 +39,7 @@ import com.esri.core.geometry.Envelope;
 import com.esri.core.geometry.GeometryEngine;
 import com.esri.core.geometry.LinearUnit;
 import com.esri.core.geometry.Point;
+import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.SpatialReference;
 import com.esri.core.geometry.Unit;
 import com.esri.core.map.Graphic;
@@ -51,6 +52,7 @@ import com.esri.core.tasks.na.NAFeaturesAsFeature;
 import com.esri.core.tasks.na.NetworkDescription;
 import com.esri.core.tasks.na.Route;
 import com.esri.core.tasks.na.RouteParameters;
+import com.esri.core.tasks.na.RouteResult;
 import com.esri.core.tasks.na.RouteTask;
 import com.esri.core.tasks.na.StopGraphic;
 
@@ -135,7 +137,34 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 });
                 break;
             case R.id.fab:
-                
+                RouteTask mRouteTask;
+                RouteResult mResults;
+                RouteParameters rp;
+                Route curRoute = null;
+                GraphicsLayer routeLayer = new GraphicsLayer();
+                mapView.addLayer(routeLayer);
+                try {
+                    mRouteTask = RouteTask
+                            .createOnlineRouteTask(
+                                    "http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route ",
+                                    null);
+                    rp = mRouteTask.retrieveDefaultRouteTaskParameters();
+                    mResults = mRouteTask.solve(rp);
+                    curRoute = mResults.getRoutes().get(0);
+                } catch (Exception e1) {
+                    e1.printStackTrace();
+                }
+                SimpleLineSymbol routeSymbol = new SimpleLineSymbol(Color.BLUE, 3);
+                PictureMarkerSymbol destinationSymbol = new PictureMarkerSymbol(
+                        mapView.getContext(), getResources().getDrawable(
+                        R.drawable.ic_my_location_black_24dp));
+                Graphic routeGraphic = new Graphic(curRoute.getRouteGraphic()
+                        .getGeometry(), routeSymbol);
+                Graphic endGraphic = new Graphic(
+                        ((Polyline) routeGraphic.getGeometry()).getPoint(((Polyline) routeGraphic
+                                .getGeometry()).getPointCount() - 1), destinationSymbol);
+                routeLayer.addGraphics(new Graphic[]{routeGraphic, endGraphic});
+                mapView.addLayer(routeLayer);
                 break;
         }
     }
@@ -148,7 +177,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         rountingBtn = (ImageButton) findViewById(R.id.main_route);
         rountingBtn.setOnClickListener(this);
         layerBtn = (ImageButton) findViewById(R.id.main_layer);
-        LocationDisplayManager ldm  = mapView.getLocationDisplayManager();
+        LocationDisplayManager ldm = mapView.getLocationDisplayManager();
         ldm.setLocationListener(new MyLocationListener());
         ldm.start();
         ldm.setAutoPanMode(LocationDisplayManager.AutoPanMode.OFF);
@@ -159,6 +188,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         public MyLocationListener() {
             super();
         }
+
         public void onLocationChanged(Location loc) {
             if (loc == null)
                 return;
@@ -169,14 +199,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 mapView.zoomToResolution(p, 3.0);
             }
         }
+
         public void onProviderDisabled(String provider) {
             Toast.makeText(getApplicationContext(), "GPS Disabled",
                     Toast.LENGTH_SHORT).show();
         }
+
         public void onProviderEnabled(String provider) {
             Toast.makeText(getApplicationContext(), "GPS Enabled",
                     Toast.LENGTH_SHORT).show();
         }
+
         public void onStatusChanged(String provider, int status, Bundle extras) {
         }
     }
