@@ -1,28 +1,19 @@
 package geotalent.workshoparcgis;
 
 import android.Manifest;
-import android.animation.Animator;
 import android.app.ProgressDialog;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.graphics.PorterDuff;
 import android.location.Location;
 import android.location.LocationListener;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
-import android.support.annotation.NonNull;
+import android.os.Handler;
 import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
+import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.View;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -33,44 +24,38 @@ import com.esri.android.map.GraphicsLayer;
 import com.esri.android.map.LocationDisplayManager;
 import com.esri.android.map.MapView;
 import com.esri.android.map.ags.ArcGISTiledMapServiceLayer;
-import com.esri.android.map.event.OnLongPressListener;
 import com.esri.android.map.event.OnSingleTapListener;
-import com.esri.core.geometry.Envelope;
 import com.esri.core.geometry.GeometryEngine;
-import com.esri.core.geometry.LinearUnit;
 import com.esri.core.geometry.Point;
 import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.SpatialReference;
-import com.esri.core.geometry.Unit;
 import com.esri.core.map.Graphic;
-import com.esri.core.renderer.ClassBreaksRenderer;
 import com.esri.core.symbol.PictureMarkerSymbol;
 import com.esri.core.symbol.SimpleLineSymbol;
-import com.esri.core.symbol.SimpleMarkerSymbol;
-import com.esri.core.tasks.na.CostAttribute;
 import com.esri.core.tasks.na.NAFeaturesAsFeature;
-import com.esri.core.tasks.na.NetworkDescription;
 import com.esri.core.tasks.na.Route;
+import com.esri.core.tasks.na.RouteDirection;
 import com.esri.core.tasks.na.RouteParameters;
 import com.esri.core.tasks.na.RouteResult;
 import com.esri.core.tasks.na.RouteTask;
 import com.esri.core.tasks.na.StopGraphic;
 
-import java.util.List;
+import java.util.ArrayList;
+import java.util.HashMap;
 
 import static android.graphics.Color.*;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
-    MapView mapView = null;
-    String mapService = "http://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer ";
+    private MapView mapView = null;
+    private String mapService = "http://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer ";
     final private int REQUEST_CODE_ASK_PERMISSION = 123;
-    GraphicsLayer graphicsLayer = new GraphicsLayer();
-    GraphicsLayer graphicsLayer2 = new GraphicsLayer();
-    Graphic pg;
-    PictureMarkerSymbol pinPic = null;
-    Point pinStart, pinFinish;
-    Button start, finish;
-    ImageButton rounteDelete, rountingBtn, layerBtn;
+    private GraphicsLayer graphicsLayer = new GraphicsLayer();
+    private GraphicsLayer graphicsLayer2 = new GraphicsLayer();
+    private Graphic pg;
+    private PictureMarkerSymbol pinPic = null;
+    private Point pinStart, pinFinish;
+    private Button start, finish;
+    private ImageButton rounteDelete, rountingBtn, layerBtn;
 
     public static Point mLocation = null;
     final SpatialReference wm = SpatialReference.create(102100);
@@ -85,7 +70,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         locationPermission();
     }
 
-    /*@Override
+    @Override
     protected void onPause() {
         super.onPause();
         mapView.pause();
@@ -95,7 +80,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     protected void onResume() {
         super.onResume();
         mapView.unpause();
-    }*/
+    }
 
     @Override
     public void onClick(View view) {
@@ -137,34 +122,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 });
                 break;
             case R.id.fab:
-                RouteTask mRouteTask;
-                RouteResult mResults;
-                RouteParameters rp;
-                Route curRoute = null;
-                GraphicsLayer routeLayer = new GraphicsLayer();
-                mapView.addLayer(routeLayer);
-                try {
-                    mRouteTask = RouteTask
-                            .createOnlineRouteTask(
-                                    "http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route ",
-                                    null);
-                    rp = mRouteTask.retrieveDefaultRouteTaskParameters();
-                    mResults = mRouteTask.solve(rp);
-                    curRoute = mResults.getRoutes().get(0);
-                } catch (Exception e1) {
-                    e1.printStackTrace();
-                }
-                SimpleLineSymbol routeSymbol = new SimpleLineSymbol(Color.BLUE, 3);
-                PictureMarkerSymbol destinationSymbol = new PictureMarkerSymbol(
-                        mapView.getContext(), getResources().getDrawable(
-                        R.drawable.ic_my_location_black_24dp));
-                Graphic routeGraphic = new Graphic(curRoute.getRouteGraphic()
-                        .getGeometry(), routeSymbol);
-                Graphic endGraphic = new Graphic(
-                        ((Polyline) routeGraphic.getGeometry()).getPoint(((Polyline) routeGraphic
-                                .getGeometry()).getPointCount() - 1), destinationSymbol);
-                routeLayer.addGraphics(new Graphic[]{routeGraphic, endGraphic});
-                mapView.addLayer(routeLayer);
                 break;
         }
     }
