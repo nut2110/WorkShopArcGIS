@@ -2,4 +2,9 @@
     <string name="app_name">WorkShopArcGIS</string>
     <string name="action_settings">Settings</string>
     <string name="title_activity_route">RouteActivity</string>
+
+    <string name="route_service">http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route</string>
+
+    <string name="progress_title">Finding Route</string>
+    <string name="progress_message">Please wait&#8230;</string>
 </resources>

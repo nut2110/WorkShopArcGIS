@@ -9,6 +9,7 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.os.Bundle;
 import android.os.Handler;
+import android.support.design.widget.CoordinatorLayout;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
@@ -24,6 +25,7 @@ import com.esri.android.map.GraphicsLayer;
 import com.esri.android.map.LocationDisplayManager;
 import com.esri.android.map.MapView;
 import com.esri.android.map.ags.ArcGISTiledMapServiceLayer;
+import com.esri.android.map.event.OnLongPressListener;
 import com.esri.android.map.event.OnSingleTapListener;
 import com.esri.core.geometry.GeometryEngine;
 import com.esri.core.geometry.Point;
@@ -53,7 +55,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private GraphicsLayer graphicsLayer2 = new GraphicsLayer();
     private Graphic pg;
     private PictureMarkerSymbol pinPic = null;
-    private Point pinStart, pinFinish;
+    private Point pinStart, pinFinish, pinStart2, pinFinish2;
     private Button start, finish;
     private ImageButton rounteDelete, rountingBtn, layerBtn;
 
@@ -122,8 +124,29 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 });
                 break;
             case R.id.fab:
+                try {
+                    mRouteTask = RouteTask.createOnlineRouteTask("http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route", null);
+                    QueryDirections(pinStart2, pinFinish2);
+                } catch (Exception e) {
+                    mException = e;
+                }
                 break;
         }
+    }
+
+    private void routeActivity() {
+        setContentView(R.layout.activity_route);
+        rounteDelete = (ImageButton) findViewById(R.id.route_delete);
+        rounteDelete.setOnClickListener(this);
+        setMap();
+        start = (Button) findViewById(R.id.routePin_start);
+        start.setOnClickListener(this);
+        finish = (Button) findViewById(R.id.routePin_finish);
+        finish.setOnClickListener(this);
+        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        fab.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
+        fab.setColorFilter(WHITE);
+        fab.setOnClickListener(this);
     }
 
     private void mainActivity() {
@@ -139,6 +162,103 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         ldm.start();
         ldm.setAutoPanMode(LocationDisplayManager.AutoPanMode.OFF);
     }
+
+    ProgressDialog dialog;
+    RouteResult mResults = null;
+    RouteTask mRouteTask = null;
+    Exception mException = null;
+    Route curRoute = null;
+    final Handler mHandler = new Handler();
+    final Runnable mUpdateResults = new Runnable() {
+        public void run() {
+            updateUI();
+        }
+    };
+    public static ArrayList<String> curDirections = new ArrayList<>();
+    SimpleLineSymbol segmentHider = new SimpleLineSymbol(Color.WHITE, 5);
+    int selectedSegmentID = -1;
+    String routeSummary = null;
+    GraphicsLayer routeLayer = new GraphicsLayer();
+    GraphicsLayer hiddenSegmentsLayer = new GraphicsLayer();
+
+    private void QueryDirections(final Point start, final Point end) {
+        // Show that the route is calculating
+        dialog = ProgressDialog.show(MainActivity.this, "Routing Sample",
+                "Calculating route...", true);
+        // Spawn the request off in a new thread to keep UI responsive
+        Thread t = new Thread() {
+            @Override
+            public void run() {
+                try {
+                    mRouteTask = RouteTask.createOnlineRouteTask("http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route", null);
+                    RouteParameters rp = mRouteTask.retrieveDefaultRouteTaskParameters();
+                    NAFeaturesAsFeature rfaf = new NAFeaturesAsFeature();
+                    StopGraphic point1 = new StopGraphic(pinStart);
+                    StopGraphic point2 = new StopGraphic(pinFinish);
+                    rfaf.addFeatures(new Graphic[] { point1, point2 });
+                    rfaf.setCompressedRequest(true);
+                    rp.setStops(rfaf);
+                    rp.setOutSpatialReference(wm);
+                    mResults = mRouteTask.solve(rp);
+                    mHandler.post(mUpdateResults);
+                } catch (Exception e) {
+                    mException = e;
+                    mHandler.post(mUpdateResults);
+                }
+            }
+        };
+        // Start the operation
+        t.start();
+
+    }
+    /**
+     * Updates the UI after a successful rest response has been received.
+     */
+    void updateUI() {
+        dialog.dismiss();
+
+        if (mResults == null) {
+            Toast.makeText(MainActivity.this, mException.toString(), Toast.LENGTH_LONG).show();
+            curDirections = null;
+            return;
+        }
+
+        curRoute = mResults.getRoutes().get(0);
+        SimpleLineSymbol routeSymbol = new SimpleLineSymbol(Color.BLUE, 3);
+        mapView.addLayer(hiddenSegmentsLayer);
+        routeLayer.removeAll();
+        mapView.addLayer(routeLayer);
+        for (RouteDirection rd : curRoute.getRoutingDirections()) {
+            HashMap<String, Object> attribs = new HashMap<String, Object>();
+            attribs.put("text", rd.getText());
+            attribs.put("time", Double.valueOf(rd.getMinutes()));
+            attribs.put("length", Double.valueOf(rd.getLength()));
+            curDirections.add(String.format("%s%n%.1f minutes (%.1f miles)",
+                    rd.getText(), rd.getMinutes(), rd.getLength()));
+            Graphic routeGraphic = new Graphic(rd.getGeometry(), segmentHider, attribs);
+            hiddenSegmentsLayer.addGraphic(routeGraphic);
+        }
+        selectedSegmentID = -1;
+
+        Graphic routeGraphic = new Graphic(curRoute.getRouteGraphic()
+                .getGeometry(), routeSymbol);
+        Graphic endGraphic = new Graphic(
+                ((Polyline) routeGraphic.getGeometry()).getPoint(((Polyline) routeGraphic
+                        .getGeometry()).getPointCount() - 1), routeSymbol);
+        routeLayer.addGraphics(new Graphic[]{routeGraphic, endGraphic});
+        routeSummary = String.format("%s%n%.1f minutes (%.1f miles)",
+                curRoute.getRouteName(), curRoute.getTotalMinutes(),
+                curRoute.getTotalMiles());
+
+        mapView.setExtent(curRoute.getEnvelope(), 250);
+
+        curDirections.remove(0);
+        curDirections.add(0, "My Location");
+
+        curDirections.remove(curDirections.size() - 1);
+        curDirections.add("Destination");
+    }
+
 
     private class MyLocationListener implements LocationListener {
 
@@ -169,21 +289,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         public void onStatusChanged(String provider, int status, Bundle extras) {
         }
-    }
-
-    private void routeActivity() {
-        setContentView(R.layout.activity_route);
-        rounteDelete = (ImageButton) findViewById(R.id.route_delete);
-        rounteDelete.setOnClickListener(this);
-        setMap();
-        start = (Button) findViewById(R.id.routePin_start);
-        start.setOnClickListener(this);
-        finish = (Button) findViewById(R.id.routePin_finish);
-        finish.setOnClickListener(this);
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
-        fab.setColorFilter(WHITE);
-        fab.setOnClickListener(this);
     }
 
     private Point convert(Point point) {
