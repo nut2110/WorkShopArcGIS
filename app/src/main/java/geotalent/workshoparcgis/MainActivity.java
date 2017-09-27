@@ -9,15 +9,14 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.os.Bundle;
 import android.os.Handler;
-import android.support.design.widget.CoordinatorLayout;
+import android.support.annotation.NonNull;
+import android.support.design.widget.BottomSheetBehavior;
 import android.support.design.widget.FloatingActionButton;
-import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -25,7 +24,6 @@ import com.esri.android.map.GraphicsLayer;
 import com.esri.android.map.LocationDisplayManager;
 import com.esri.android.map.MapView;
 import com.esri.android.map.ags.ArcGISTiledMapServiceLayer;
-import com.esri.android.map.event.OnLongPressListener;
 import com.esri.android.map.event.OnSingleTapListener;
 import com.esri.core.geometry.GeometryEngine;
 import com.esri.core.geometry.Point;
@@ -34,7 +32,10 @@ import com.esri.core.geometry.SpatialReference;
 import com.esri.core.map.Graphic;
 import com.esri.core.symbol.PictureMarkerSymbol;
 import com.esri.core.symbol.SimpleLineSymbol;
+import com.esri.core.symbol.SimpleMarkerSymbol;
+import com.esri.core.tasks.na.CostAttribute;
 import com.esri.core.tasks.na.NAFeaturesAsFeature;
+import com.esri.core.tasks.na.NetworkDescription;
 import com.esri.core.tasks.na.Route;
 import com.esri.core.tasks.na.RouteDirection;
 import com.esri.core.tasks.na.RouteParameters;
@@ -43,9 +44,12 @@ import com.esri.core.tasks.na.RouteTask;
 import com.esri.core.tasks.na.StopGraphic;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 
 import static android.graphics.Color.*;
+import static geotalent.workshoparcgis.R.id.fab;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
     private MapView mapView = null;
@@ -55,13 +59,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private GraphicsLayer graphicsLayer2 = new GraphicsLayer();
     private Graphic pg;
     private PictureMarkerSymbol pinPic = null;
-    private Point pinStart, pinFinish, pinStart2, pinFinish2;
+    private Point pinStart, pinFinish;
     private Button start, finish;
     private ImageButton rounteDelete, rountingBtn, layerBtn;
 
     public static Point mLocation = null;
     final SpatialReference wm = SpatialReference.create(102100);
     final SpatialReference egs = SpatialReference.create(4326);
+
+    private FloatingActionButton fab;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,6 +89,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         super.onResume();
         mapView.unpause();
     }
+
+    private BottomSheetBehavior bottomSheetBehavior;
 
     @Override
     public void onClick(View view) {
@@ -126,7 +134,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             case R.id.fab:
                 try {
                     mRouteTask = RouteTask.createOnlineRouteTask("http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route", null);
-                    QueryDirections(pinStart2, pinFinish2);
+                    QueryDirections(pinStart, pinFinish);
                 } catch (Exception e) {
                     mException = e;
                 }
@@ -143,10 +151,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         start.setOnClickListener(this);
         finish = (Button) findViewById(R.id.routePin_finish);
         finish.setOnClickListener(this);
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
         fab.setColorFilter(WHITE);
         fab.setOnClickListener(this);
+        View llBottomSheet = findViewById(R.id.bottom_sheet);
+        bottomSheetBehavior = BottomSheetBehavior.from(llBottomSheet);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
     }
 
     private void mainActivity() {
@@ -174,28 +185,30 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             updateUI();
         }
     };
-    public static ArrayList<String> curDirections = new ArrayList<>();
-    SimpleLineSymbol segmentHider = new SimpleLineSymbol(Color.WHITE, 5);
+    SimpleLineSymbol segmentHider = new SimpleLineSymbol(Color.BLUE, 5);
     int selectedSegmentID = -1;
     String routeSummary = null;
     GraphicsLayer routeLayer = new GraphicsLayer();
     GraphicsLayer hiddenSegmentsLayer = new GraphicsLayer();
+    List<CostAttribute> a = new ArrayList<>();
 
     private void QueryDirections(final Point start, final Point end) {
-        // Show that the route is calculating
         dialog = ProgressDialog.show(MainActivity.this, "Routing Sample",
                 "Calculating route...", true);
-        // Spawn the request off in a new thread to keep UI responsive
         Thread t = new Thread() {
             @Override
             public void run() {
                 try {
-                    mRouteTask = RouteTask.createOnlineRouteTask("http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route", null);
                     RouteParameters rp = mRouteTask.retrieveDefaultRouteTaskParameters();
+                    NetworkDescription description = mRouteTask.getNetworkDescription();
+                    List<CostAttribute> costAttributes = description.getCostAttributes();
+                    /*if (costAttributes.size() > 0) {
+                        rp.setImpedanceAttributeName(costAttributes.get(0).getName());
+                    }*/
                     NAFeaturesAsFeature rfaf = new NAFeaturesAsFeature();
-                    StopGraphic point1 = new StopGraphic(pinStart);
-                    StopGraphic point2 = new StopGraphic(pinFinish);
-                    rfaf.addFeatures(new Graphic[] { point1, point2 });
+                    StopGraphic point1 = new StopGraphic(start);
+                    StopGraphic point2 = new StopGraphic(end);
+                    rfaf.addFeatures(new Graphic[]{point1, point2});
                     rfaf.setCompressedRequest(true);
                     rp.setStops(rfaf);
                     rp.setOutSpatialReference(wm);
@@ -207,24 +220,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
             }
         };
-        // Start the operation
         t.start();
 
     }
-    /**
-     * Updates the UI after a successful rest response has been received.
-     */
+
     void updateUI() {
         dialog.dismiss();
-
+        ArrayList<String> curDirections = new ArrayList<>();
         if (mResults == null) {
             Toast.makeText(MainActivity.this, mException.toString(), Toast.LENGTH_LONG).show();
-            curDirections = null;
             return;
         }
 
         curRoute = mResults.getRoutes().get(0);
-        SimpleLineSymbol routeSymbol = new SimpleLineSymbol(Color.BLUE, 3);
+        SimpleLineSymbol routeSymbol = new SimpleLineSymbol(Color.BLUE, 5);
+        SimpleMarkerSymbol pinSymbol = new SimpleMarkerSymbol(Color.RED, 10, SimpleMarkerSymbol.STYLE.CIRCLE);
         mapView.addLayer(hiddenSegmentsLayer);
         routeLayer.removeAll();
         mapView.addLayer(routeLayer);
@@ -239,24 +249,26 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             hiddenSegmentsLayer.addGraphic(routeGraphic);
         }
         selectedSegmentID = -1;
-
         Graphic routeGraphic = new Graphic(curRoute.getRouteGraphic()
                 .getGeometry(), routeSymbol);
-        Graphic endGraphic = new Graphic(
-                ((Polyline) routeGraphic.getGeometry()).getPoint(((Polyline) routeGraphic
-                        .getGeometry()).getPointCount() - 1), routeSymbol);
-        routeLayer.addGraphics(new Graphic[]{routeGraphic, endGraphic});
+        Graphic[] graphics = new Graphic[((Polyline) routeGraphic.getGeometry()).getPointCount()];
+        for (int i = 0; i < ((Polyline) routeGraphic.getGeometry()).getPointCount(); i++) {
+            graphics[i] = new Graphic(((Polyline) routeGraphic.getGeometry()).getPoint(i), pinSymbol);
+        }
+        routeLayer.addGraphics(graphics);
         routeSummary = String.format("%s%n%.1f minutes (%.1f miles)",
                 curRoute.getRouteName(), curRoute.getTotalMinutes(),
                 curRoute.getTotalMiles());
-
-        mapView.setExtent(curRoute.getEnvelope(), 250);
+        mapView.setExtent(curRoute.getEnvelope(), 10);
 
         curDirections.remove(0);
         curDirections.add(0, "My Location");
 
         curDirections.remove(curDirections.size() - 1);
         curDirections.add("Destination");
+        ((TextView) findViewById(R.id.btmSheet)).setText(routeSummary);
+        bottomSheetBehavior.setPeekHeight(200);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
     }
 
 
