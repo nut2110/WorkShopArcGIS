@@ -14,6 +14,8 @@ import android.support.design.widget.BottomSheetBehavior;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
@@ -49,6 +51,7 @@ import java.util.HashMap;
 import java.util.List;
 
 import static android.graphics.Color.*;
+import static geotalent.workshoparcgis.R.id.cancel_action;
 import static geotalent.workshoparcgis.R.id.fab;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
@@ -61,7 +64,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private PictureMarkerSymbol pinPic = null;
     private Point pinStart, pinFinish;
     private Button start, finish;
-    private ImageButton rounteDelete, rountingBtn, layerBtn;
+    private Boolean lmain,lroute;
 
     public static Point mLocation = null;
     final SpatialReference wm = SpatialReference.create(102100);
@@ -76,6 +79,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         locationPermission();
+        lmain = true;
+        lroute = false;
     }
 
     @Override
@@ -95,12 +100,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     public void onClick(View view) {
         switch (view.getId()) {
-            case R.id.main_route:
-                routeActivity();
-                break;
-            case R.id.route_delete:
-                mainActivity();
-                break;
             case R.id.routePin_start:
                 pinPic = new PictureMarkerSymbol(getResources().getDrawable(R.drawable.ic_pin_drop_black_24dp));
                 mapView.setOnSingleTapListener(new OnSingleTapListener() {
@@ -142,10 +141,49 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        if (lmain == true){
+            getMenuInflater().inflate(R.menu.menu_main,menu);
+        }else if (lroute == true){
+            getMenuInflater().inflate(R.menu.menu_route,menu);
+        }
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        int id = item.getItemId();
+        if (id == R.id.menu_layer){
+            return true;
+        }else if(id == R.id.menu_route){ //go to route
+            routeActivity();
+            switchLayer(2);
+            return true;
+        }else if(id == R.id.menu_delete){ //back to main
+            mainActivity();
+            switchLayer(1);
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+    private void switchLayer(int layer){
+        switch (layer){
+            case 1:
+                lmain = true;
+                lroute = false;
+                break;
+            case 2:
+                lmain = false;
+                lroute = true;
+                break;
+        }
+    }
+
     private void routeActivity() {
         setContentView(R.layout.activity_route);
-        rounteDelete = (ImageButton) findViewById(R.id.route_delete);
-        rounteDelete.setOnClickListener(this);
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
         setMap();
         start = (Button) findViewById(R.id.routePin_start);
         start.setOnClickListener(this);
@@ -158,20 +196,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         View llBottomSheet = findViewById(R.id.bottom_sheet);
         bottomSheetBehavior = BottomSheetBehavior.from(llBottomSheet);
         bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
-    }
-
-    private void mainActivity() {
-        setContentView(R.layout.activity_main);
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        setMap();
-        rountingBtn = (ImageButton) findViewById(R.id.main_route);
-        rountingBtn.setOnClickListener(this);
-        layerBtn = (ImageButton) findViewById(R.id.main_layer);
-        LocationDisplayManager ldm = mapView.getLocationDisplayManager();
-        ldm.setLocationListener(new MyLocationListener());
-        ldm.start();
-        ldm.setAutoPanMode(LocationDisplayManager.AutoPanMode.OFF);
     }
 
     ProgressDialog dialog;
@@ -190,7 +214,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     String routeSummary = null;
     GraphicsLayer routeLayer = new GraphicsLayer();
     GraphicsLayer hiddenSegmentsLayer = new GraphicsLayer();
-    List<CostAttribute> a = new ArrayList<>();
 
     private void QueryDirections(final Point start, final Point end) {
         dialog = ProgressDialog.show(MainActivity.this, "Routing Sample",
@@ -200,11 +223,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             public void run() {
                 try {
                     RouteParameters rp = mRouteTask.retrieveDefaultRouteTaskParameters();
-                    NetworkDescription description = mRouteTask.getNetworkDescription();
-                    List<CostAttribute> costAttributes = description.getCostAttributes();
-                    /*if (costAttributes.size() > 0) {
-                        rp.setImpedanceAttributeName(costAttributes.get(0).getName());
-                    }*/
                     NAFeaturesAsFeature rfaf = new NAFeaturesAsFeature();
                     StopGraphic point1 = new StopGraphic(start);
                     StopGraphic point2 = new StopGraphic(end);
@@ -269,6 +287,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         ((TextView) findViewById(R.id.btmSheet)).setText(routeSummary);
         bottomSheetBehavior.setPeekHeight(200);
         bottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+    }
+
+    private void mainActivity() {
+        setContentView(R.layout.activity_main);
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        setMap();
+        LocationDisplayManager ldm = mapView.getLocationDisplayManager();
+        ldm.setLocationListener(new MyLocationListener());
+        ldm.start();
+        ldm.setAutoPanMode(LocationDisplayManager.AutoPanMode.OFF);
     }
 
 

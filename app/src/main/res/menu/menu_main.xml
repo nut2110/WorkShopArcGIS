@@ -2,9 +2,29 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     tools:context="geotalent.workshoparcgis.MainActivity">
+
     <item
-        android:id="@+id/action_settings"
-        android:orderInCategory="100"
-        android:title="@string/action_settings"
-        app:showAsAction="never"/>
+        android:id="@+id/menu_layer"
+        android:title="layer"
+        app:showAsAction="always"
+        android:icon="@drawable/ic_layers_black_24dp">
+        <menu>
+            <item
+                android:id="@+id/menu_census"
+                android:checkable="true"
+                android:title="Census"
+                app:showAsAction="never" />
+            <item
+                android:id="@+id/menu_accident"
+                android:checkable="true"
+                android:title="Accident"
+                app:showAsAction="never" />
+        </menu>
+    </item>
+
+    <item
+        android:id="@+id/menu_route"
+        android:icon="@drawable/ic_directions_black_24dp"
+        android:title="route"
+        app:showAsAction="ifRoom" />
 </menu>
