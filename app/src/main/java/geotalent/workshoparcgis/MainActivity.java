@@ -5,11 +5,11 @@ import android.app.ProgressDialog;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.location.LocationListener;
 import android.os.Bundle;
 import android.os.Handler;
-import android.support.annotation.NonNull;
 import android.support.design.widget.BottomSheetBehavior;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
@@ -18,27 +18,26 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
-import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.esri.android.map.FeatureLayer;
 import com.esri.android.map.GraphicsLayer;
 import com.esri.android.map.LocationDisplayManager;
 import com.esri.android.map.MapView;
 import com.esri.android.map.ags.ArcGISTiledMapServiceLayer;
 import com.esri.android.map.event.OnSingleTapListener;
 import com.esri.core.geometry.GeometryEngine;
-import com.esri.core.geometry.MultiPoint;
 import com.esri.core.geometry.Point;
 import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.SpatialReference;
+import com.esri.core.map.Feature;
 import com.esri.core.map.Graphic;
 import com.esri.core.symbol.PictureMarkerSymbol;
 import com.esri.core.symbol.SimpleLineSymbol;
 import com.esri.core.symbol.SimpleMarkerSymbol;
-import com.esri.core.tasks.na.CostAttribute;
 import com.esri.core.tasks.na.NAFeaturesAsFeature;
-import com.esri.core.tasks.na.NetworkDescription;
 import com.esri.core.tasks.na.Route;
 import com.esri.core.tasks.na.RouteDirection;
 import com.esri.core.tasks.na.RouteParameters;
@@ -46,14 +45,12 @@ import com.esri.core.tasks.na.RouteResult;
 import com.esri.core.tasks.na.RouteTask;
 import com.esri.core.tasks.na.StopGraphic;
 
+import org.w3c.dom.Text;
+
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 
 import static android.graphics.Color.*;
-import static geotalent.workshoparcgis.R.id.cancel_action;
-import static geotalent.workshoparcgis.R.id.fab;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
     private MapView mapView = null;
@@ -66,12 +63,36 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Point pinStart, pinFinish;
     private Button start, finish;
     private Boolean lmain,lroute;
+    private TextView btmNav,btmMile;
+    private ImageView btmImg;
+    private String mapUrl = "http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route";
 
     public static Point mLocation = null;
     final SpatialReference wm = SpatialReference.create(102100);
     final SpatialReference egs = SpatialReference.create(4326);
 
+    /**Route Activity**/
     private FloatingActionButton fab;
+    private SimpleMarkerSymbol pinSymbol = new SimpleMarkerSymbol(Color.RED, 10, SimpleMarkerSymbol.STYLE.CIRCLE);
+    private SimpleMarkerSymbol pinSymbolselect = new SimpleMarkerSymbol(Color.GREEN, 10, SimpleMarkerSymbol.STYLE.CIRCLE);
+    private ProgressDialog dialog;
+    private RouteResult mResults = null;
+    private RouteTask mRouteTask = null;
+    private Exception mException = null;
+    private Route curRoute = null;
+    final Handler mHandler = new Handler();
+    final Runnable mUpdateResults = new Runnable() {
+        public void run() {
+            updateUI();
+        }
+    };
+    private SimpleLineSymbol segmentHider = null;
+    private int selectedSegmentID = -1;
+    private String routeSummary = null;
+    private GraphicsLayer routeLayer = new GraphicsLayer();
+    private GraphicsLayer hiddenSegmentsLayer = new GraphicsLayer();
+    private BottomSheetBehavior bottomSheetBehavior;
+    /**Route Activity**/
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,20 +104,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         lmain = true;
         lroute = false;
     }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        mapView.pause();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        mapView.unpause();
-    }
-
-    private BottomSheetBehavior bottomSheetBehavior;
 
     @Override
     public void onClick(View view) {
@@ -133,13 +140,51 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 break;
             case R.id.fab:
                 try {
-                    mRouteTask = RouteTask.createOnlineRouteTask("http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route", null);
+                    mRouteTask = RouteTask.createOnlineRouteTask(mapUrl, null);
                     QueryDirections(pinStart, pinFinish);
+                    mapView.setOnSingleTapListener(new OnSingleTapListener() {
+                        @Override
+                        public void onSingleTap(float x, float y) {
+                            int[] indexes = hiddenSegmentsLayer.getGraphicIDs(x, y, 20);
+                            hiddenSegmentsLayer.updateGraphic(selectedSegmentID,pinSymbol);
+                            if (indexes.length < 1) {
+                                return;
+                            }
+                            selectedSegmentID = indexes[0];
+                            Graphic selected = hiddenSegmentsLayer.getGraphic(selectedSegmentID);
+                            hiddenSegmentsLayer.updateGraphic(selectedSegmentID,pinSymbolselect);
+                            String direction = ((String) selected.getAttributeValue("text"));
+                            double length = ((Double) selected.getAttributeValue("length")).doubleValue();
+                            btmImg.setImageResource(imgRoute(direction));
+                            btmNav.setText(direction);
+                            btmMile.setText(String.format("%.2f Miles",length));
+                            bottomSheetBehavior.setPeekHeight(200);
+                            bottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+                            mapView.setExtent(selected.getGeometry(), 50);
+                        }
+                    });
                 } catch (Exception e) {
                     mException = e;
                 }
                 break;
         }
+    }
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mapView.pause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mapView.unpause();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean("map1Active",true);
     }
 
     @Override
@@ -179,114 +224,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 lroute = true;
                 break;
         }
-    }
-
-    private void routeActivity() {
-        setContentView(R.layout.activity_route);
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        setMap();
-        start = (Button) findViewById(R.id.routePin_start);
-        start.setOnClickListener(this);
-        finish = (Button) findViewById(R.id.routePin_finish);
-        finish.setOnClickListener(this);
-        fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
-        fab.setColorFilter(WHITE);
-        fab.setOnClickListener(this);
-        View llBottomSheet = findViewById(R.id.bottom_sheet);
-        bottomSheetBehavior = BottomSheetBehavior.from(llBottomSheet);
-        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
-    }
-
-    ProgressDialog dialog;
-    RouteResult mResults = null;
-    RouteTask mRouteTask = null;
-    Exception mException = null;
-    Route curRoute = null;
-    final Handler mHandler = new Handler();
-    final Runnable mUpdateResults = new Runnable() {
-        public void run() {
-            updateUI();
-        }
-    };
-    SimpleLineSymbol segmentHider = null;
-    int selectedSegmentID = -1;
-    String routeSummary = null;
-    GraphicsLayer routeLayer = new GraphicsLayer();
-    GraphicsLayer hiddenSegmentsLayer = new GraphicsLayer();
-
-    private void QueryDirections(final Point start, final Point end) {
-        dialog = ProgressDialog.show(MainActivity.this, "Routing Sample",
-                "Calculating route...", true);
-        Thread t = new Thread() {
-            @Override
-            public void run() {
-                try {
-                    RouteParameters rp = mRouteTask.retrieveDefaultRouteTaskParameters();
-                    NAFeaturesAsFeature rfaf = new NAFeaturesAsFeature();
-                    StopGraphic point1 = new StopGraphic(start);
-                    StopGraphic point2 = new StopGraphic(end);
-                    rfaf.addFeatures(new Graphic[]{point1, point2});
-                    rfaf.setCompressedRequest(true);
-                    rp.setStops(rfaf);
-                    rp.setOutSpatialReference(wm);
-                    mResults = mRouteTask.solve(rp);
-                    mHandler.post(mUpdateResults);
-                } catch (Exception e) {
-                    mException = e;
-                    mHandler.post(mUpdateResults);
-                }
-            }
-        };
-        t.start();
-
-    }
-
-    void updateUI() {
-        dialog.dismiss();
-        ArrayList<String> curDirections = new ArrayList<>();
-        if (mResults == null) {
-            Toast.makeText(MainActivity.this, mException.toString(), Toast.LENGTH_LONG).show();
-            return;
-        }
-        curRoute = mResults.getRoutes().get(0);
-        SimpleMarkerSymbol pinSymbol = new SimpleMarkerSymbol(Color.RED, 10, SimpleMarkerSymbol.STYLE.CIRCLE);
-        segmentHider = new SimpleLineSymbol(Color.BLUE, 5);
-        mapView.addLayer(hiddenSegmentsLayer);
-        routeLayer.removeAll();
-        hiddenSegmentsLayer.removeAll();
-        mapView.addLayer(routeLayer);
-        Graphic[] graphics = new Graphic[curRoute.getRoutingDirections().size()];
-        int i =0;
-        for (RouteDirection rd : curRoute.getRoutingDirections()) {
-            HashMap<String, Object> attribs = new HashMap<String, Object>();
-            attribs.put("text", rd.getText());
-            attribs.put("time", Double.valueOf(rd.getMinutes()));
-            attribs.put("length", Double.valueOf(rd.getLength()));
-            curDirections.add(String.format("%s%n%.1f minutes (%.1f miles)",
-                    rd.getText(), rd.getMinutes(), rd.getLength()));
-            Graphic routeGraphic = new Graphic(rd.getGeometry(), segmentHider, attribs);
-            graphics[i] = new Graphic(((Polyline) routeGraphic.getGeometry()).getPoint(((Polyline) routeGraphic.getGeometry()).getPointCount() - 1),pinSymbol);
-            hiddenSegmentsLayer.addGraphic(routeGraphic);
-            i++;
-        }
-        selectedSegmentID = -1;
-        routeLayer.addGraphics(graphics);
-        routeSummary = String.format("%s%n%.1f minutes (%.1f miles)",
-                curRoute.getRouteName(), curRoute.getTotalMinutes(),
-                curRoute.getTotalMiles());
-        mapView.setExtent(curRoute.getEnvelope(), 10);
-
-        curDirections.remove(0);
-        curDirections.add(0, "My Location");
-
-        curDirections.remove(curDirections.size() - 1);
-        curDirections.add("Destination");
-
-        ((TextView) findViewById(R.id.btmSheet)).setText(routeSummary);
-        bottomSheetBehavior.setPeekHeight(200);
-        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
     }
 
     private void mainActivity() {
@@ -372,4 +309,107 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
+    private void routeActivity() {
+        setContentView(R.layout.activity_route);
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        setMap();
+        start = (Button) findViewById(R.id.routePin_start);
+        start.setOnClickListener(this);
+        finish = (Button) findViewById(R.id.routePin_finish);
+        finish.setOnClickListener(this);
+        fab = (FloatingActionButton) findViewById(R.id.fab);
+        fab.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
+        fab.setColorFilter(WHITE);
+        fab.setOnClickListener(this);
+        View llBottomSheet = findViewById(R.id.bottom_sheet);
+        bottomSheetBehavior = BottomSheetBehavior.from(llBottomSheet);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        btmNav = (TextView) findViewById(R.id.btmSheet_nav);
+        btmMile = (TextView) findViewById(R.id.btmSheet_mile);
+        btmImg = (ImageView) findViewById(R.id.btmSheet_img);
+    }
+
+    private void QueryDirections(final Point start, final Point end) {
+        dialog = ProgressDialog.show(MainActivity.this, "Routing Sample",
+                "Calculating route...", true);
+        Thread t = new Thread() {
+            @Override
+            public void run() {
+                try {
+                    RouteParameters rp = mRouteTask.retrieveDefaultRouteTaskParameters();
+                    NAFeaturesAsFeature rfaf = new NAFeaturesAsFeature();
+                    StopGraphic point1 = new StopGraphic(start);
+                    StopGraphic point2 = new StopGraphic(end);
+                    rfaf.addFeatures(new Graphic[]{point1, point2});
+                    rfaf.setCompressedRequest(true);
+                    rp.setStops(rfaf);
+                    rp.setOutSpatialReference(wm);
+                    mResults = mRouteTask.solve(rp);
+                    mHandler.post(mUpdateResults);
+                } catch (Exception e) {
+                    mException = e;
+                    mHandler.post(mUpdateResults);
+                }
+            }
+        };
+        t.start();
+    }
+
+    void updateUI() {
+        dialog.dismiss();
+        ArrayList<String> curDirections = new ArrayList<>();
+        if (mResults == null) {
+            Toast.makeText(MainActivity.this, mException.toString(), Toast.LENGTH_LONG).show();
+            return;
+        }
+        curRoute = mResults.getRoutes().get(0);
+        segmentHider = new SimpleLineSymbol(Color.BLUE, 5);
+        mapView.addLayer(routeLayer);
+        mapView.addLayer(hiddenSegmentsLayer);
+        routeLayer.removeAll();
+        hiddenSegmentsLayer.removeAll();
+        for (RouteDirection rd : curRoute.getRoutingDirections()) {
+            HashMap<String, Object> attribs = new HashMap<String, Object>();
+            attribs.put("text", rd.getText());
+            attribs.put("time", Double.valueOf(rd.getMinutes()));
+            attribs.put("length", Double.valueOf(rd.getLength()));
+            curDirections.add(String.format("%s%n%.1f minutes (%.1f miles)",
+                    rd.getText(), rd.getMinutes(), rd.getLength()));
+            Graphic pinGraphic = new Graphic(((Polyline) rd.getGeometry()).getPoint(((Polyline) rd.getGeometry()).getPointCount() - 1), pinSymbol, attribs);
+            Graphic routeGraphic = new Graphic(rd.getGeometry(), segmentHider, attribs);
+            routeLayer.addGraphic(routeGraphic);
+            hiddenSegmentsLayer.addGraphic(pinGraphic);
+        }
+        selectedSegmentID = -1;
+        routeSummary = String.format("%s%n%.1f minutes (%.1f miles)",
+                curRoute.getRouteName(), curRoute.getTotalMinutes(),
+                curRoute.getTotalMiles());
+        mapView.setExtent(curRoute.getEnvelope(), 10);
+
+        curDirections.remove(0);
+        curDirections.add(0, "My Location");
+
+        curDirections.remove(curDirections.size() - 1);
+        curDirections.add("Destination");
+    }
+
+    private int imgRoute(String txt){
+        if (txt.contains("Go") || txt.contains("Continue")||txt.contains("straight")){
+            return R.drawable.nav_straight;
+        }else if (txt.contains("Turn right")){
+            return R.drawable.nav_right;
+        }else if (txt.contains("Turn left")){
+            return R.drawable.nav_left;
+        }else if (txt.contains("Turn right")){
+            return R.drawable.nav_right;
+        } else if (txt.contains("U-turn")){
+            return R.drawable.nav_uturn;
+        }else if (txt.contains("on the right")){
+            return R.drawable.nav_on_right;
+        }else if (txt.contains("on the left")){
+            return R.drawable.nav_on_right;
+        }
+        return 0;
+    }
 }
