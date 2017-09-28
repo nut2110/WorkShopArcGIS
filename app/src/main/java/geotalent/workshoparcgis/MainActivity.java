@@ -28,6 +28,7 @@ import com.esri.android.map.MapView;
 import com.esri.android.map.ags.ArcGISTiledMapServiceLayer;
 import com.esri.android.map.event.OnSingleTapListener;
 import com.esri.core.geometry.GeometryEngine;
+import com.esri.core.geometry.MultiPoint;
 import com.esri.core.geometry.Point;
 import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.SpatialReference;
@@ -209,7 +210,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             updateUI();
         }
     };
-    SimpleLineSymbol segmentHider = new SimpleLineSymbol(Color.BLUE, 5);
+    SimpleLineSymbol segmentHider = null;
     int selectedSegmentID = -1;
     String routeSummary = null;
     GraphicsLayer routeLayer = new GraphicsLayer();
@@ -249,13 +250,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             Toast.makeText(MainActivity.this, mException.toString(), Toast.LENGTH_LONG).show();
             return;
         }
-
         curRoute = mResults.getRoutes().get(0);
-        SimpleLineSymbol routeSymbol = new SimpleLineSymbol(Color.BLUE, 5);
         SimpleMarkerSymbol pinSymbol = new SimpleMarkerSymbol(Color.RED, 10, SimpleMarkerSymbol.STYLE.CIRCLE);
+        segmentHider = new SimpleLineSymbol(Color.BLUE, 5);
         mapView.addLayer(hiddenSegmentsLayer);
         routeLayer.removeAll();
+        hiddenSegmentsLayer.removeAll();
         mapView.addLayer(routeLayer);
+        Graphic[] graphics = new Graphic[curRoute.getRoutingDirections().size()];
+        int i =0;
         for (RouteDirection rd : curRoute.getRoutingDirections()) {
             HashMap<String, Object> attribs = new HashMap<String, Object>();
             attribs.put("text", rd.getText());
@@ -264,15 +267,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             curDirections.add(String.format("%s%n%.1f minutes (%.1f miles)",
                     rd.getText(), rd.getMinutes(), rd.getLength()));
             Graphic routeGraphic = new Graphic(rd.getGeometry(), segmentHider, attribs);
+            graphics[i] = new Graphic(((Polyline) routeGraphic.getGeometry()).getPoint(((Polyline) routeGraphic.getGeometry()).getPointCount() - 1),pinSymbol);
             hiddenSegmentsLayer.addGraphic(routeGraphic);
+            i++;
         }
         selectedSegmentID = -1;
-        Graphic routeGraphic = new Graphic(curRoute.getRouteGraphic()
-                .getGeometry(), routeSymbol);
-        Graphic[] graphics = new Graphic[((Polyline) routeGraphic.getGeometry()).getPointCount()];
-        for (int i = 0; i < ((Polyline) routeGraphic.getGeometry()).getPointCount(); i++) {
-            graphics[i] = new Graphic(((Polyline) routeGraphic.getGeometry()).getPoint(i), pinSymbol);
-        }
         routeLayer.addGraphics(graphics);
         routeSummary = String.format("%s%n%.1f minutes (%.1f miles)",
                 curRoute.getRouteName(), curRoute.getTotalMinutes(),
@@ -284,6 +283,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         curDirections.remove(curDirections.size() - 1);
         curDirections.add("Destination");
+
         ((TextView) findViewById(R.id.btmSheet)).setText(routeSummary);
         bottomSheetBehavior.setPeekHeight(200);
         bottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
