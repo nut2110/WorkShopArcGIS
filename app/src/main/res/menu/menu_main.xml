@@ -3,28 +3,34 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:context="geotalent.workshoparcgis.MainActivity">
 
-    <item
-        android:id="@+id/menu_layer"
-        android:title="layer"
-        app:showAsAction="always"
-        android:icon="@drawable/ic_layers_black_24dp">
-        <menu>
-            <item
-                android:id="@+id/menu_census"
-                android:checkable="true"
-                android:title="Census"
-                app:showAsAction="never" />
-            <item
-                android:id="@+id/menu_accident"
-                android:checkable="true"
-                android:title="Accident"
-                app:showAsAction="never" />
-        </menu>
-    </item>
+        <item
+            android:id="@+id/menu_layer"
+            android:title="layer"
+            app:showAsAction="always"
+            android:icon="@drawable/ic_layers_black_24dp">
+            <menu>
+                <item
+                    android:id="@+id/menu_census"
+                    android:checkable="true"
+                    android:title="Census"
+                    app:showAsAction="never" />
+                <item
+                    android:id="@+id/menu_accident"
+                    android:checkable="true"
+                    android:title="Accident"
+                    app:showAsAction="never" />
+            </menu>
+        </item>
+
+        <item
+            android:id="@+id/menu_route"
+            android:icon="@drawable/ic_directions_black_24dp"
+            android:title="route"
+            app:showAsAction="always" />
 
     <item
-        android:id="@+id/menu_route"
-        android:icon="@drawable/ic_directions_black_24dp"
-        android:title="route"
-        app:showAsAction="ifRoom" />
+        android:id="@+id/menu_delete"
+        android:icon="@drawable/ic_delete_black_24dp"
+        app:showAsAction="always"
+        android:title="Delete" />
 </menu>

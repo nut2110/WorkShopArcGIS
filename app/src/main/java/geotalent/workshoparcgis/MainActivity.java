@@ -10,8 +10,10 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.os.Bundle;
 import android.os.Handler;
+import android.support.constraint.ConstraintLayout;
 import android.support.design.widget.BottomSheetBehavior;
 import android.support.design.widget.FloatingActionButton;
+import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
@@ -32,6 +34,7 @@ import com.esri.core.geometry.GeometryEngine;
 import com.esri.core.geometry.Point;
 import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.SpatialReference;
+import com.esri.core.internal.catalog.Group;
 import com.esri.core.map.Feature;
 import com.esri.core.map.Graphic;
 import com.esri.core.symbol.PictureMarkerSymbol;
@@ -62,16 +65,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private PictureMarkerSymbol pinPic = null;
     private Point pinStart, pinFinish;
     private Button start, finish;
-    private Boolean lmain,lroute;
-    private TextView btmNav,btmMile;
+    private Boolean lmain = true, lroute = false;
+    private TextView btmNav, btmMile;
     private ImageView btmImg;
     private String mapUrl = "http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route";
+    private ConstraintLayout routeLayout;
 
     public static Point mLocation = null;
+    private Point myLocation = null;
     final SpatialReference wm = SpatialReference.create(102100);
     final SpatialReference egs = SpatialReference.create(4326);
+    private MenuItem menu_layer, menu_route,menu_delete;
 
-    /**Route Activity**/
+    /**
+     * Route Activity
+     **/
     private FloatingActionButton fab;
     private SimpleMarkerSymbol pinSymbol = new SimpleMarkerSymbol(Color.RED, 10, SimpleMarkerSymbol.STYLE.CIRCLE);
     private SimpleMarkerSymbol pinSymbolselect = new SimpleMarkerSymbol(Color.GREEN, 10, SimpleMarkerSymbol.STYLE.CIRCLE);
@@ -92,17 +100,26 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private GraphicsLayer routeLayer = new GraphicsLayer();
     private GraphicsLayer hiddenSegmentsLayer = new GraphicsLayer();
     private BottomSheetBehavior bottomSheetBehavior;
-    /**Route Activity**/
+
+    /**
+     * Route Activity
+     **/
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        toolbar.setTitleTextColor(Color.BLACK);
         setSupportActionBar(toolbar);
+        fab = (FloatingActionButton) findViewById(R.id.fab);
+        View llBottomSheet = findViewById(R.id.bottom_sheet);
+        bottomSheetBehavior = BottomSheetBehavior.from(llBottomSheet);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        routeLayout = (ConstraintLayout) findViewById(R.id.route_btn);
+        routeLayout.setVisibility(View.INVISIBLE);
         locationPermission();
-        lmain = true;
-        lroute = false;
+
     }
 
     @Override
@@ -146,18 +163,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         @Override
                         public void onSingleTap(float x, float y) {
                             int[] indexes = hiddenSegmentsLayer.getGraphicIDs(x, y, 20);
-                            hiddenSegmentsLayer.updateGraphic(selectedSegmentID,pinSymbol);
+                            hiddenSegmentsLayer.updateGraphic(selectedSegmentID, pinSymbol);
                             if (indexes.length < 1) {
                                 return;
                             }
                             selectedSegmentID = indexes[0];
                             Graphic selected = hiddenSegmentsLayer.getGraphic(selectedSegmentID);
-                            hiddenSegmentsLayer.updateGraphic(selectedSegmentID,pinSymbolselect);
+                            hiddenSegmentsLayer.updateGraphic(selectedSegmentID, pinSymbolselect);
                             String direction = ((String) selected.getAttributeValue("text"));
                             double length = ((Double) selected.getAttributeValue("length")).doubleValue();
                             btmImg.setImageResource(imgRoute(direction));
                             btmNav.setText(direction);
-                            btmMile.setText(String.format("%.2f Miles",length));
+                            btmMile.setText(String.format("%.2f Miles", length));
                             bottomSheetBehavior.setPeekHeight(200);
                             bottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
                             mapView.setExtent(selected.getGeometry(), 50);
@@ -169,6 +186,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 break;
         }
     }
+
     @Override
     protected void onPause() {
         super.onPause();
@@ -182,39 +200,48 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        outState.putBoolean("map1Active",true);
+    public Object onRetainCustomNonConfigurationInstance() {
+        return mapView.retainState();
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        if (lmain == true){
-            getMenuInflater().inflate(R.menu.menu_main,menu);
-        }else if (lroute == true){
-            getMenuInflater().inflate(R.menu.menu_route,menu);
-        }
+        getMenuInflater().inflate(R.menu.menu_main, menu);
+        menu_layer = menu.findItem(R.id.menu_layer);
+        menu_route = menu.findItem(R.id.menu_route);
+        menu_delete = menu.findItem(R.id.menu_delete);
+        updateActionBar();
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
-        if (id == R.id.menu_layer){
+        if (id == R.id.menu_layer) {
+
             return true;
-        }else if(id == R.id.menu_route){ //go to route
+        } else if (id == R.id.menu_route) { //go to route
             routeActivity();
             switchLayer(2);
             return true;
-        }else if(id == R.id.menu_delete){ //back to main
+        } else if (id == R.id.menu_delete) { //back to main
             mainActivity();
             switchLayer(1);
             return true;
         }
         return super.onOptionsItemSelected(item);
     }
-    private void switchLayer(int layer){
-        switch (layer){
+
+
+    private void updateActionBar() {
+        // Update the visible menu items to allow correctly switching maps.
+        menu_layer.setVisible(lmain);
+        menu_route.setVisible(lmain);
+        menu_delete.setVisible(lroute);
+    }
+
+    private void switchLayer(int layer) {
+        switch (layer) {
             case 1:
                 lmain = true;
                 lroute = false;
@@ -224,17 +251,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 lroute = true;
                 break;
         }
+        updateActionBar();
     }
 
     private void mainActivity() {
-        setContentView(R.layout.activity_main);
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        setMap();
-        LocationDisplayManager ldm = mapView.getLocationDisplayManager();
-        ldm.setLocationListener(new MyLocationListener());
-        ldm.start();
-        ldm.setAutoPanMode(LocationDisplayManager.AutoPanMode.OFF);
+        routeLayout.setVisibility(View.INVISIBLE);
+        fab.setVisibility(View.INVISIBLE);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        if (myLocation == null) {
+            LocationDisplayManager ldm = mapView.getLocationDisplayManager();
+            ldm.setLocationListener(new MyLocationListener());
+            ldm.start();
+            ldm.setAutoPanMode(LocationDisplayManager.AutoPanMode.OFF);
+        } else {
+            mapView.zoomToResolution(myLocation, 3.0);
+        }
     }
 
 
@@ -250,8 +281,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             boolean zoomToMe = (mLocation == null) ? true : false;
             mLocation = new Point(loc.getLongitude(), loc.getLatitude());
             if (zoomToMe) {
-                Point p = (Point) GeometryEngine.project(mLocation, egs, wm);
-                mapView.zoomToResolution(p, 3.0);
+                myLocation = (Point) GeometryEngine.project(mLocation, egs, wm);
+                mapView.zoomToResolution(myLocation, 3.0);
             }
         }
 
@@ -291,6 +322,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 return;
             }
         }
+        setMap();
         mainActivity();
     }
 
@@ -310,20 +342,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private void routeActivity() {
-        setContentView(R.layout.activity_route);
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        setMap();
+        fab.setVisibility(View.VISIBLE);
+        fab.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
+        fab.setColorFilter(WHITE);
+        fab.setOnClickListener(this);
+        routeLayout.setVisibility(View.VISIBLE);
+        routeLayout.setFocusable(true);
+        mapView.centerAndZoom(34.057213, -117.194954, 16);
+        mapView.startLayoutAnimation();
         start = (Button) findViewById(R.id.routePin_start);
         start.setOnClickListener(this);
         finish = (Button) findViewById(R.id.routePin_finish);
         finish.setOnClickListener(this);
-        fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
-        fab.setColorFilter(WHITE);
-        fab.setOnClickListener(this);
-        View llBottomSheet = findViewById(R.id.bottom_sheet);
-        bottomSheetBehavior = BottomSheetBehavior.from(llBottomSheet);
         bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
         btmNav = (TextView) findViewById(R.id.btmSheet_nav);
         btmMile = (TextView) findViewById(R.id.btmSheet_mile);
@@ -394,20 +424,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         curDirections.add("Destination");
     }
 
-    private int imgRoute(String txt){
-        if (txt.contains("Go") || txt.contains("Continue")||txt.contains("straight")){
+    private int imgRoute(String txt) {
+        if (txt.contains("Go") || txt.contains("Continue") || txt.contains("straight")) {
             return R.drawable.nav_straight;
-        }else if (txt.contains("Turn right")){
+        } else if (txt.contains("Turn right")) {
             return R.drawable.nav_right;
-        }else if (txt.contains("Turn left")){
+        } else if (txt.contains("Turn left")) {
             return R.drawable.nav_left;
-        }else if (txt.contains("Turn right")){
+        } else if (txt.contains("Turn right")) {
             return R.drawable.nav_right;
-        } else if (txt.contains("U-turn")){
+        } else if (txt.contains("U-turn")) {
             return R.drawable.nav_uturn;
-        }else if (txt.contains("on the right")){
+        } else if (txt.contains("on the right")) {
             return R.drawable.nav_on_right;
-        }else if (txt.contains("on the left")){
+        } else if (txt.contains("on the left")) {
             return R.drawable.nav_on_right;
         }
         return 0;
