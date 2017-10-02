@@ -2,12 +2,15 @@ package geotalent.workshoparcgis;
 
 import android.Manifest;
 import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.location.LocationListener;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.constraint.ConstraintLayout;
@@ -16,30 +19,52 @@ import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ListView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.esri.android.action.IdentifyResultSpinner;
+import com.esri.android.action.IdentifyResultSpinnerAdapter;
+import com.esri.android.action.IdentifyResultView;
+import com.esri.android.map.Callout;
 import com.esri.android.map.FeatureLayer;
 import com.esri.android.map.GraphicsLayer;
 import com.esri.android.map.LocationDisplayManager;
 import com.esri.android.map.MapView;
+import com.esri.android.map.ags.ArcGISFeatureLayer;
 import com.esri.android.map.ags.ArcGISTiledMapServiceLayer;
+import com.esri.android.map.event.OnLongPressListener;
 import com.esri.android.map.event.OnSingleTapListener;
+import com.esri.core.geodatabase.GeodatabaseFeatureServiceTable;
+import com.esri.core.geometry.Envelope;
 import com.esri.core.geometry.GeometryEngine;
 import com.esri.core.geometry.Point;
+import com.esri.core.geometry.Polygon;
 import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.SpatialReference;
 import com.esri.core.internal.catalog.Group;
+import com.esri.core.map.CallbackListener;
+import com.esri.core.map.CodedValueDomain;
 import com.esri.core.map.Feature;
+import com.esri.core.map.FeatureResult;
+import com.esri.core.map.Field;
 import com.esri.core.map.Graphic;
 import com.esri.core.symbol.PictureMarkerSymbol;
 import com.esri.core.symbol.SimpleLineSymbol;
 import com.esri.core.symbol.SimpleMarkerSymbol;
+import com.esri.core.tasks.identify.IdentifyParameters;
+import com.esri.core.tasks.identify.IdentifyResult;
+import com.esri.core.tasks.identify.IdentifyTask;
 import com.esri.core.tasks.na.NAFeaturesAsFeature;
 import com.esri.core.tasks.na.Route;
 import com.esri.core.tasks.na.RouteDirection;
@@ -47,17 +72,22 @@ import com.esri.core.tasks.na.RouteParameters;
 import com.esri.core.tasks.na.RouteResult;
 import com.esri.core.tasks.na.RouteTask;
 import com.esri.core.tasks.na.StopGraphic;
+import com.esri.core.tasks.query.QueryParameters;
 
 import org.w3c.dom.Text;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static android.graphics.Color.*;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
     private MapView mapView = null;
-    private String mapService = "http://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer ";
+    private String mapMainString = "http://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer";
+    private String mapAccidentString = "http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/HomelandSecurity/operations/FeatureServer/0";
+    private String mapCensusString = "http://sampleserver1.arcgisonline.com/ArcGIS/rest/services/Demographics/ESRI_Census_USA/MapServer/5";
     final private int REQUEST_CODE_ASK_PERMISSION = 123;
     private GraphicsLayer graphicsLayer = new GraphicsLayer();
     private GraphicsLayer graphicsLayer2 = new GraphicsLayer();
@@ -68,14 +98,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Boolean lmain = true, lroute = false;
     private TextView btmNav, btmMile;
     private ImageView btmImg;
-    private String mapUrl = "http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route";
+    private String mapServiceMainString = "http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Network/USA/NAServer/Route";
+    private String mapServiceAccidentString = "http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/HomelandSecurity/operations/MapServer";
     private ConstraintLayout routeLayout;
+    private ArcGISTiledMapServiceLayer main;
+    private ArcGISFeatureLayer accident,census;
 
     public static Point mLocation = null;
     private Point myLocation = null;
     final SpatialReference wm = SpatialReference.create(102100);
     final SpatialReference egs = SpatialReference.create(4326);
-    private MenuItem menu_layer, menu_route,menu_delete;
+    private MenuItem menu_layer, menu_route, menu_delete, menu_accident, menu_census;
 
     /**
      * Route Activity
@@ -96,7 +129,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     };
     private SimpleLineSymbol segmentHider = null;
     private int selectedSegmentID = -1;
-    private String routeSummary = null;
     private GraphicsLayer routeLayer = new GraphicsLayer();
     private GraphicsLayer hiddenSegmentsLayer = new GraphicsLayer();
     private BottomSheetBehavior bottomSheetBehavior;
@@ -112,12 +144,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         toolbar.setTitleTextColor(Color.BLACK);
         setSupportActionBar(toolbar);
+        mapView = (MapView) findViewById(R.id.map);
         fab = (FloatingActionButton) findViewById(R.id.fab);
         View llBottomSheet = findViewById(R.id.bottom_sheet);
         bottomSheetBehavior = BottomSheetBehavior.from(llBottomSheet);
         bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
         routeLayout = (ConstraintLayout) findViewById(R.id.route_btn);
         routeLayout.setVisibility(View.INVISIBLE);
+        accident = new ArcGISFeatureLayer(mapAccidentString, ArcGISFeatureLayer.MODE.ONDEMAND);
+        census = new ArcGISFeatureLayer(mapCensusString, ArcGISFeatureLayer.MODE.ONDEMAND);
+        main= new ArcGISTiledMapServiceLayer(mapMainString);
         locationPermission();
 
     }
@@ -157,7 +193,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 break;
             case R.id.fab:
                 try {
-                    mRouteTask = RouteTask.createOnlineRouteTask(mapUrl, null);
+                    mRouteTask = RouteTask.createOnlineRouteTask(mapServiceMainString, null);
                     QueryDirections(pinStart, pinFinish);
                     mapView.setOnSingleTapListener(new OnSingleTapListener() {
                         @Override
@@ -202,12 +238,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     public Object onRetainCustomNonConfigurationInstance() {
         return mapView.retainState();
-    }
+    } //save map state
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.menu_main, menu);
         menu_layer = menu.findItem(R.id.menu_layer);
+        menu_accident = menu.findItem(R.id.menu_accident);
+        menu_census = menu.findItem(R.id.menu_census);
         menu_route = menu.findItem(R.id.menu_route);
         menu_delete = menu.findItem(R.id.menu_delete);
         updateActionBar();
@@ -217,8 +255,24 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
-        if (id == R.id.menu_layer) {
-
+        if (id == R.id.menu_accident) {
+            if (menu_accident.isChecked()) {
+                menu_accident.setChecked(false);
+                mapView.removeLayer(accident);
+            } else {
+                menu_accident.setChecked(true);
+                accidentActivity();
+            }
+            return true;
+        } else if (id == R.id.menu_census) {
+            if (menu_census.isChecked()) {
+                menu_census.setChecked(false);
+                mapView.removeLayer(census);
+            } else {
+                menu_census.setChecked(true);
+                mapView.addLayer(census);
+                censusActiyity();
+            }
             return true;
         } else if (id == R.id.menu_route) { //go to route
             routeActivity();
@@ -226,6 +280,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             return true;
         } else if (id == R.id.menu_delete) { //back to main
             mainActivity();
+            clearRouteGraphic();
             switchLayer(1);
             return true;
         }
@@ -268,7 +323,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-
     private class MyLocationListener implements LocationListener {
 
         public MyLocationListener() {
@@ -306,9 +360,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         return aux;
     }
 
-    private void setMap() {
-        mapView = (MapView) findViewById(R.id.map);
-        mapView.addLayer(new ArcGISTiledMapServiceLayer(mapService));
+    private void setMap(ArcGISTiledMapServiceLayer mapService) {
+        mapView.addLayer(mapService);
         mapView.enableWrapAround(true);
     }
 
@@ -322,7 +375,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 return;
             }
         }
-        setMap();
+        setMap(main);
         mainActivity();
     }
 
@@ -412,9 +465,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             hiddenSegmentsLayer.addGraphic(pinGraphic);
         }
         selectedSegmentID = -1;
-        routeSummary = String.format("%s%n%.1f minutes (%.1f miles)",
-                curRoute.getRouteName(), curRoute.getTotalMinutes(),
-                curRoute.getTotalMiles());
         mapView.setExtent(curRoute.getEnvelope(), 10);
 
         curDirections.remove(0);
@@ -441,5 +491,120 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             return R.drawable.nav_on_right;
         }
         return 0;
+    }
+
+    private void clearRouteGraphic() {
+        hiddenSegmentsLayer.removeAll();
+        graphicsLayer.removeAll();
+        graphicsLayer2.removeAll();
+        routeLayer.removeAll();
+    }
+
+    private IdentifyParameters params;
+
+    private void accidentActivity() {
+        mapView.addLayer(accident);
+        mapView.zoomToResolution(myLocation, 5.0);
+        params = new IdentifyParameters();
+        params.setTolerance(20);
+        params.setDPI(98);
+        params.setLayers(new int[] {4});
+        params.setLayerMode(IdentifyParameters.ALL_LAYERS);
+
+        mapView.setOnSingleTapListener(new OnSingleTapListener() {
+            @Override
+            public void onSingleTap(float x, float y) {
+                // Add to Identify Parameters based on tapped location
+                Point identifyPoint = mapView.toMapPoint(x, y);
+
+                params.setGeometry(identifyPoint);
+                params.setSpatialReference(mapView.getSpatialReference());
+                params.setMapHeight(mapView.getHeight());
+                params.setMapWidth(mapView.getWidth());
+                params.setReturnGeometry(false);
+
+                // add the area of extent to identify parameters
+                Envelope env = new Envelope();
+                mapView.getExtent().queryEnvelope(env);
+                params.setMapExtent(env);
+
+                // execute the identify task off UI thread
+                MyIdentifyTask mTask = new MyIdentifyTask(identifyPoint);
+                mTask.execute(params);
+            }
+        });
+    }
+
+    private class MyIdentifyTask extends AsyncTask<IdentifyParameters, Void, IdentifyResult[]> {
+
+        IdentifyTask task = new IdentifyTask(mapServiceAccidentString);
+        IdentifyResult[] mResult;
+
+        Point mAnchor;
+
+        MyIdentifyTask(Point anchor){
+            this.mAnchor = anchor;
+        }
+
+        @Override
+        protected void onPreExecute() {
+            // create dialog while working off UI thread
+            dialog = ProgressDialog.show(MainActivity.this, "Identify Task",
+                    "Identify query ...");
+
+        }
+
+        @Override
+        protected IdentifyResult[] doInBackground(IdentifyParameters... params) {
+            // check that you have the identify parameters
+            if (params != null && params.length > 0) {
+                IdentifyParameters mParams = params[0];
+
+                try {
+                    // Run IdentifyTask with Identify Parameters
+                    mResult = task.execute(mParams); //= null
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
+            return mResult;
+        }
+
+        @Override
+        protected void onPostExecute(IdentifyResult[] results) {
+            // dismiss dialog
+            if (dialog.isShowing()) {
+                dialog.dismiss();
+            }
+
+            ArrayList<IdentifyResult> resultList = new ArrayList<>();
+
+            IdentifyResult result_1;
+
+            for (int index = 0; index < results.length; index++) {
+
+                result_1 = results[index];
+                String displayFieldName = result_1.getDisplayFieldName();
+                Map<String, Object> attr = result_1.getAttributes();
+                for (String key : attr.keySet()) {
+                    if (key.equalsIgnoreCase(displayFieldName)) {
+                        resultList.add(result_1);
+                    }
+                }
+            }
+
+            Callout callout = mapView.getCallout();
+            Object a = resultList;
+            //callout.setContent(createIdentifyContent(resultList));
+            callout.show(mAnchor);
+        }
+    }
+
+    private void censusActiyity(){
+        //int a = (census.getExtent()).getPointCount();
+        Object a = census.getFullExtent().
+
     }
 }
