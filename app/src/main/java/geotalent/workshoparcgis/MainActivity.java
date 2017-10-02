@@ -16,6 +16,7 @@ import android.os.Handler;
 import android.support.constraint.ConstraintLayout;
 import android.support.design.widget.BottomSheetBehavior;
 import android.support.design.widget.FloatingActionButton;
+import android.support.transition.Visibility;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
@@ -45,8 +46,10 @@ import com.esri.android.map.ags.ArcGISFeatureLayer;
 import com.esri.android.map.ags.ArcGISTiledMapServiceLayer;
 import com.esri.android.map.event.OnLongPressListener;
 import com.esri.android.map.event.OnSingleTapListener;
+import com.esri.core.geodatabase.GeodatabaseFeature;
 import com.esri.core.geodatabase.GeodatabaseFeatureServiceTable;
 import com.esri.core.geometry.Envelope;
+import com.esri.core.geometry.Geometry;
 import com.esri.core.geometry.GeometryEngine;
 import com.esri.core.geometry.Point;
 import com.esri.core.geometry.Polygon;
@@ -102,13 +105,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private String mapServiceAccidentString = "http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/HomelandSecurity/operations/MapServer";
     private ConstraintLayout routeLayout;
     private ArcGISTiledMapServiceLayer main;
-    private ArcGISFeatureLayer accident,census;
+    private ArcGISFeatureLayer accident, census;
 
     public static Point mLocation = null;
     private Point myLocation = null;
     final SpatialReference wm = SpatialReference.create(102100);
     final SpatialReference egs = SpatialReference.create(4326);
     private MenuItem menu_layer, menu_route, menu_delete, menu_accident, menu_census;
+
+    private View bsRoute, bsIdentify;
+    private BottomSheetBehavior bsbRoute, bsbIdentify;
 
     /**
      * Route Activity
@@ -131,7 +137,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private int selectedSegmentID = -1;
     private GraphicsLayer routeLayer = new GraphicsLayer();
     private GraphicsLayer hiddenSegmentsLayer = new GraphicsLayer();
-    private BottomSheetBehavior bottomSheetBehavior;
 
     /**
      * Route Activity
@@ -146,14 +151,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         setSupportActionBar(toolbar);
         mapView = (MapView) findViewById(R.id.map);
         fab = (FloatingActionButton) findViewById(R.id.fab);
-        View llBottomSheet = findViewById(R.id.bottom_sheet);
-        bottomSheetBehavior = BottomSheetBehavior.from(llBottomSheet);
-        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        bsRoute = findViewById(R.id.bsRoute);
+        bsbRoute = BottomSheetBehavior.from(bsRoute);
+        bsbRoute.setState(BottomSheetBehavior.STATE_HIDDEN);
+        bsIdentify = findViewById(R.id.bsIdentify);
+        bsbIdentify = BottomSheetBehavior.from(bsIdentify);
+        bsbIdentify.setState(BottomSheetBehavior.STATE_HIDDEN);
         routeLayout = (ConstraintLayout) findViewById(R.id.route_btn);
-        routeLayout.setVisibility(View.INVISIBLE);
         accident = new ArcGISFeatureLayer(mapAccidentString, ArcGISFeatureLayer.MODE.ONDEMAND);
         census = new ArcGISFeatureLayer(mapCensusString, ArcGISFeatureLayer.MODE.ONDEMAND);
-        main= new ArcGISTiledMapServiceLayer(mapMainString);
+        main = new ArcGISTiledMapServiceLayer(mapMainString);
         locationPermission();
 
     }
@@ -211,8 +218,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                             btmImg.setImageResource(imgRoute(direction));
                             btmNav.setText(direction);
                             btmMile.setText(String.format("%.2f Miles", length));
-                            bottomSheetBehavior.setPeekHeight(200);
-                            bottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+                            bsbRoute.setPeekHeight(200);
+                            bsbRoute.setState(BottomSheetBehavior.STATE_EXPANDED);
                             mapView.setExtent(selected.getGeometry(), 50);
                         }
                     });
@@ -254,6 +261,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
+        bsbRoute.setState(BottomSheetBehavior.STATE_HIDDEN);
+        bsbIdentify.setState(BottomSheetBehavior.STATE_HIDDEN);
         int id = item.getItemId();
         if (id == R.id.menu_accident) {
             if (menu_accident.isChecked()) {
@@ -293,6 +302,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         menu_layer.setVisible(lmain);
         menu_route.setVisible(lmain);
         menu_delete.setVisible(lroute);
+        if (lroute == true) {
+            routeLayout.setVisibility(View.VISIBLE);
+            fab.setVisibility(View.VISIBLE);
+        } else {
+            routeLayout.setVisibility(View.INVISIBLE);
+            fab.setVisibility(View.INVISIBLE);
+        }
+
     }
 
     private void switchLayer(int layer) {
@@ -310,9 +327,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private void mainActivity() {
-        routeLayout.setVisibility(View.INVISIBLE);
-        fab.setVisibility(View.INVISIBLE);
-        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
         if (myLocation == null) {
             LocationDisplayManager ldm = mapView.getLocationDisplayManager();
             ldm.setLocationListener(new MyLocationListener());
@@ -395,11 +409,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private void routeActivity() {
-        fab.setVisibility(View.VISIBLE);
         fab.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
         fab.setColorFilter(WHITE);
         fab.setOnClickListener(this);
-        routeLayout.setVisibility(View.VISIBLE);
         routeLayout.setFocusable(true);
         mapView.centerAndZoom(34.057213, -117.194954, 16);
         mapView.startLayoutAnimation();
@@ -407,7 +419,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         start.setOnClickListener(this);
         finish = (Button) findViewById(R.id.routePin_finish);
         finish.setOnClickListener(this);
-        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
         btmNav = (TextView) findViewById(R.id.btmSheet_nav);
         btmMile = (TextView) findViewById(R.id.btmSheet_mile);
         btmImg = (ImageView) findViewById(R.id.btmSheet_img);
@@ -498,6 +509,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         graphicsLayer.removeAll();
         graphicsLayer2.removeAll();
         routeLayer.removeAll();
+        start.setText(null);
+        finish.setText(null);
     }
 
     private IdentifyParameters params;
@@ -508,13 +521,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         params = new IdentifyParameters();
         params.setTolerance(20);
         params.setDPI(98);
-        params.setLayers(new int[] {4});
         params.setLayerMode(IdentifyParameters.ALL_LAYERS);
+        params.setLayers(new int[]{0});
 
-        mapView.setOnSingleTapListener(new OnSingleTapListener() {
+        mapView.setOnLongPressListener(new OnLongPressListener() {
             @Override
-            public void onSingleTap(float x, float y) {
-                // Add to Identify Parameters based on tapped location
+            public boolean onLongPress(float x, float y) {
                 Point identifyPoint = mapView.toMapPoint(x, y);
 
                 params.setGeometry(identifyPoint);
@@ -523,14 +535,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 params.setMapWidth(mapView.getWidth());
                 params.setReturnGeometry(false);
 
-                // add the area of extent to identify parameters
                 Envelope env = new Envelope();
                 mapView.getExtent().queryEnvelope(env);
                 params.setMapExtent(env);
 
-                // execute the identify task off UI thread
                 MyIdentifyTask mTask = new MyIdentifyTask(identifyPoint);
                 mTask.execute(params);
+                pinStart = mapView.toMapPoint(x, y);
+                return true;
             }
         });
     }
@@ -542,13 +554,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         Point mAnchor;
 
-        MyIdentifyTask(Point anchor){
+        MyIdentifyTask(Point anchor) {
             this.mAnchor = anchor;
         }
 
         @Override
         protected void onPreExecute() {
-            // create dialog while working off UI thread
             dialog = ProgressDialog.show(MainActivity.this, "Identify Task",
                     "Identify query ...");
 
@@ -556,13 +567,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         @Override
         protected IdentifyResult[] doInBackground(IdentifyParameters... params) {
-            // check that you have the identify parameters
             if (params != null && params.length > 0) {
                 IdentifyParameters mParams = params[0];
 
                 try {
-                    // Run IdentifyTask with Identify Parameters
-                    mResult = task.execute(mParams); //= null
+                    mResult = task.execute(mParams);
 
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -574,7 +583,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         @Override
         protected void onPostExecute(IdentifyResult[] results) {
-            // dismiss dialog
             if (dialog.isShowing()) {
                 dialog.dismiss();
             }
@@ -594,17 +602,28 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     }
                 }
             }
-
-            Callout callout = mapView.getCallout();
-            Object a = resultList;
-            //callout.setContent(createIdentifyContent(resultList));
-            callout.show(mAnchor);
+            if (resultList.size()>0){
+                TextView in = (TextView) findViewById(R.id.btmSheet_IN);
+                TextView sc = (TextView) findViewById(R.id.btmSheet_SC);
+                TextView des = (TextView) findViewById(R.id.btmSheet_Des);
+                in.setText(String.valueOf(resultList.get(0).getAttributes().get("Incident Number")));
+                sc.setText(String.valueOf(resultList.get(0).getAttributes().get("Sub Category")));
+                des.setText(String.valueOf(resultList.get(0).getAttributes().get("Description")));
+                bsbIdentify.setPeekHeight(200);
+                bsbIdentify.setState(BottomSheetBehavior.STATE_EXPANDED);
+                pinPic = new PictureMarkerSymbol(getResources().getDrawable(R.drawable.ic_pin_drop_black_24dp));
+                graphicsLayer.removeAll();
+                pg = new Graphic(pinStart, pinPic);
+                graphicsLayer.addGraphic(pg);
+                mapView.addLayer(graphicsLayer);
+            }
         }
     }
 
-    private void censusActiyity(){
+    private void censusActiyity() {
         //int a = (census.getExtent()).getPointCount();
-        Object a = census.getFullExtent().
-
+        Point point = census.getFullExtent().getCenter();
+        Point center = (Point) GeometryEngine.project(point, egs, wm);
+        mapView.centerAt(center, true);
     }
 }
