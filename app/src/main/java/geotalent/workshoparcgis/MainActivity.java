@@ -48,13 +48,17 @@ import com.esri.android.map.event.OnLongPressListener;
 import com.esri.android.map.event.OnSingleTapListener;
 import com.esri.core.geodatabase.GeodatabaseFeature;
 import com.esri.core.geodatabase.GeodatabaseFeatureServiceTable;
+import com.esri.core.geometry.AngularUnit;
+import com.esri.core.geometry.AreaUnit;
 import com.esri.core.geometry.Envelope;
 import com.esri.core.geometry.Geometry;
 import com.esri.core.geometry.GeometryEngine;
+import com.esri.core.geometry.LinearUnit;
 import com.esri.core.geometry.Point;
 import com.esri.core.geometry.Polygon;
 import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.SpatialReference;
+import com.esri.core.geometry.Unit;
 import com.esri.core.internal.catalog.Group;
 import com.esri.core.map.CallbackListener;
 import com.esri.core.map.CodedValueDomain;
@@ -533,11 +537,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 params.setSpatialReference(mapView.getSpatialReference());
                 params.setMapHeight(mapView.getHeight());
                 params.setMapWidth(mapView.getWidth());
-                params.setReturnGeometry(false);
+                params.setReturnGeometry(true);
 
                 Envelope env = new Envelope();
                 mapView.getExtent().queryEnvelope(env);
                 params.setMapExtent(env);
+                params.setTolerance(50);
 
                 MyIdentifyTask mTask = new MyIdentifyTask(identifyPoint);
                 mTask.execute(params);
@@ -613,7 +618,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 bsbIdentify.setState(BottomSheetBehavior.STATE_EXPANDED);
                 pinPic = new PictureMarkerSymbol(getResources().getDrawable(R.drawable.ic_pin_drop_black_24dp));
                 graphicsLayer.removeAll();
-                pg = new Graphic(pinStart, pinPic);
+                Point point = (Point) resultList.get(0).getGeometry();
+                Unit meter = Unit.create(LinearUnit.Code.METER);
+                Point newPoint = GeometryEngine.geodesicMove(point,mapView.getSpatialReference(),100, (LinearUnit) meter,0);
+                pg = new Graphic(newPoint, pinPic);
                 graphicsLayer.addGraphic(pg);
                 mapView.addLayer(graphicsLayer);
             }
