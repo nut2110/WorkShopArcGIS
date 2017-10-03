@@ -271,6 +271,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (id == R.id.menu_accident) {
             if (menu_accident.isChecked()) {
                 menu_accident.setChecked(false);
+                graphicsLayer.removeAll();
                 mapView.removeLayer(accident);
             } else {
                 menu_accident.setChecked(true);
