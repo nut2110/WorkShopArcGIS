@@ -1,13 +1,11 @@
 package geotalent.workshoparcgis;
 
 import android.Manifest;
+import android.app.Dialog;
 import android.app.ProgressDialog;
-import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
-import android.content.res.Resources;
 import android.graphics.Color;
-import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.location.LocationListener;
 import android.os.AsyncTask;
@@ -16,29 +14,16 @@ import android.os.Handler;
 import android.support.constraint.ConstraintLayout;
 import android.support.design.widget.BottomSheetBehavior;
 import android.support.design.widget.FloatingActionButton;
-import android.support.transition.Visibility;
-import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.ListView;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.esri.android.action.IdentifyResultSpinner;
-import com.esri.android.action.IdentifyResultSpinnerAdapter;
-import com.esri.android.action.IdentifyResultView;
-import com.esri.android.map.Callout;
-import com.esri.android.map.FeatureLayer;
 import com.esri.android.map.GraphicsLayer;
 import com.esri.android.map.LocationDisplayManager;
 import com.esri.android.map.MapView;
@@ -46,10 +31,6 @@ import com.esri.android.map.ags.ArcGISFeatureLayer;
 import com.esri.android.map.ags.ArcGISTiledMapServiceLayer;
 import com.esri.android.map.event.OnLongPressListener;
 import com.esri.android.map.event.OnSingleTapListener;
-import com.esri.core.geodatabase.GeodatabaseFeature;
-import com.esri.core.geodatabase.GeodatabaseFeatureServiceTable;
-import com.esri.core.geometry.AngularUnit;
-import com.esri.core.geometry.AreaUnit;
 import com.esri.core.geometry.Envelope;
 import com.esri.core.geometry.Geometry;
 import com.esri.core.geometry.GeometryEngine;
@@ -59,16 +40,13 @@ import com.esri.core.geometry.Polygon;
 import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.SpatialReference;
 import com.esri.core.geometry.Unit;
-import com.esri.core.internal.catalog.Group;
-import com.esri.core.map.CallbackListener;
-import com.esri.core.map.CodedValueDomain;
 import com.esri.core.map.Feature;
 import com.esri.core.map.FeatureResult;
-import com.esri.core.map.Field;
 import com.esri.core.map.Graphic;
 import com.esri.core.symbol.PictureMarkerSymbol;
 import com.esri.core.symbol.SimpleLineSymbol;
 import com.esri.core.symbol.SimpleMarkerSymbol;
+import com.esri.core.tasks.ags.query.Query;
 import com.esri.core.tasks.identify.IdentifyParameters;
 import com.esri.core.tasks.identify.IdentifyResult;
 import com.esri.core.tasks.identify.IdentifyTask;
@@ -80,12 +58,10 @@ import com.esri.core.tasks.na.RouteResult;
 import com.esri.core.tasks.na.RouteTask;
 import com.esri.core.tasks.na.StopGraphic;
 import com.esri.core.tasks.query.QueryParameters;
-
-import org.w3c.dom.Text;
+import com.esri.core.tasks.query.QueryTask;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static android.graphics.Color.*;
@@ -115,6 +91,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Point myLocation = null;
     final SpatialReference wm = SpatialReference.create(102100);
     final SpatialReference egs = SpatialReference.create(4326);
+    final SpatialReference epsg = SpatialReference.create(4269);
     private MenuItem menu_layer, menu_route, menu_delete, menu_accident, menu_census;
 
     private View bsRoute, bsIdentify;
@@ -182,7 +159,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         pg = new Graphic(pinStart, pinPic);
                         graphicsLayer.addGraphic(pg);
                         mapView.addLayer(graphicsLayer);
-                        pinStart = convert(pinStart);
+                        pinStart = (Point) GeometryEngine.project(pinStart, mapView.getSpatialReference(), SpatialReference.create(SpatialReference.WKID_WGS84));
                         start.setText(String.format("Latitude: %.4f, Longitude: %.4f", pinStart.getY(), pinStart.getX()));
                     }
                 });
@@ -197,7 +174,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         pg = new Graphic(pinFinish, pinPic);
                         graphicsLayer2.addGraphic(pg);
                         mapView.addLayer(graphicsLayer2);
-                        pinFinish = convert(pinFinish);
+                        pinFinish = (Point) GeometryEngine.project(pinFinish, mapView.getSpatialReference(), SpatialReference.create(SpatialReference.WKID_WGS84));
                         finish.setText(String.format("Latitude: %.4f, Longitude: %.4f", pinFinish.getY(), pinFinish.getX()));
                     }
                 });
@@ -373,12 +350,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    private Point convert(Point point) {
-        SpatialReference sp = SpatialReference.create(SpatialReference.WKID_WGS84);
-        Point aux = (Point) GeometryEngine.project(point, mapView.getSpatialReference(), sp);
-        return aux;
-    }
-
     private void setMap(ArcGISTiledMapServiceLayer mapService) {
         mapView.addLayer(mapService);
         mapView.enableWrapAround(true);
@@ -524,10 +495,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         mapView.addLayer(accident);
         mapView.zoomToResolution(myLocation, 5.0);
         params = new IdentifyParameters();
-        params.setTolerance(20);
         params.setDPI(98);
         params.setLayerMode(IdentifyParameters.ALL_LAYERS);
         params.setLayers(new int[]{0});
+        params.setTolerance(50);
 
         mapView.setOnLongPressListener(new OnLongPressListener() {
             @Override
@@ -543,9 +514,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Envelope env = new Envelope();
                 mapView.getExtent().queryEnvelope(env);
                 params.setMapExtent(env);
-                params.setTolerance(50);
 
-                MyIdentifyTask mTask = new MyIdentifyTask(identifyPoint);
+                MyIdentifyTask mTask = new MyIdentifyTask();
                 mTask.execute(params);
                 pinStart = mapView.toMapPoint(x, y);
                 return true;
@@ -557,12 +527,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         IdentifyTask task = new IdentifyTask(mapServiceAccidentString);
         IdentifyResult[] mResult;
-
-        Point mAnchor;
-
-        MyIdentifyTask(Point anchor) {
-            this.mAnchor = anchor;
-        }
 
         @Override
         protected void onPreExecute() {
@@ -608,7 +572,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     }
                 }
             }
-            if (resultList.size()>0){
+            if (resultList.size() > 0) {
                 TextView in = (TextView) findViewById(R.id.btmSheet_IN);
                 TextView sc = (TextView) findViewById(R.id.btmSheet_SC);
                 TextView des = (TextView) findViewById(R.id.btmSheet_Des);
@@ -621,7 +585,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 graphicsLayer.removeAll();
                 Point point = (Point) resultList.get(0).getGeometry();
                 Unit meter = Unit.create(LinearUnit.Code.METER);
-                Point newPoint = GeometryEngine.geodesicMove(point,mapView.getSpatialReference(),100, (LinearUnit) meter,0);
+                Point newPoint = GeometryEngine.geodesicMove(point, mapView.getSpatialReference(), 100, (LinearUnit) meter, 0);
                 pg = new Graphic(newPoint, pinPic);
                 graphicsLayer.addGraphic(pg);
                 mapView.addLayer(graphicsLayer);
@@ -629,10 +593,91 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
+    private IdentifyParameters qParams;
+    private Point identifyPoint;
+    private Envelope envelope;
+    private Geometry area,censusEnv;
+
     private void censusActiyity() {
-        //int a = (census.getExtent()).getPointCount();
-        Point point = census.getFullExtent().getCenter();
-        Point center = (Point) GeometryEngine.project(point, egs, wm);
-        mapView.centerAt(center, true);
+        envelope = (Envelope) GeometryEngine.project(census.getFullExtent(), epsg, mapView.getSpatialReference());
+
+        qParams = new IdentifyParameters();
+        qParams.setDPI(98);
+        qParams.setLayerMode(IdentifyParameters.ALL_LAYERS);
+        qParams.setLayers(new int[]{0});
+        qParams.setTolerance(50);
+
+        mapView.setExtent(envelope);
+        mapView.setOnSingleTapListener(new OnSingleTapListener() {
+            @Override
+            public void onSingleTap(float x, float y) {
+                Unit kilometer = Unit.create(LinearUnit.Code.KILOMETER);
+                identifyPoint = mapView.toMapPoint(x, y);
+                Polygon a = GeometryEngine.buffer(identifyPoint, mapView.getSpatialReference(), 100, kilometer);
+                area = GeometryEngine.intersect(envelope,a,mapView.getSpatialReference());
+                censusEnv = GeometryEngine.project(area,mapView.getSpatialReference(),epsg);
+
+                QueryFeatureLayer mTask = new QueryFeatureLayer();
+                mTask.execute();
+
+            }
+        });
+    }
+
+    private class QueryFeatureLayer extends AsyncTask<String, Void, FeatureResult> {
+
+        public QueryFeatureLayer() {
+        }
+
+        @Override
+        protected void onPreExecute() {
+            dialog = ProgressDialog.show(MainActivity.this, "", "Please wait....query task is executing");
+        }
+
+        @Override
+        protected FeatureResult doInBackground(String... params) {
+
+            QueryParameters mParams = new QueryParameters();
+            mParams.setGeometry(censusEnv);
+            mParams.setReturnGeometry(true);
+            mParams.setOutSpatialReference(egs);
+
+            QueryTask queryTask = new QueryTask(mapCensusString);
+            FeatureResult results = null;
+
+            try {
+                results = queryTask.execute(mParams);
+                return results;
+            } catch (Exception e) {
+                Object a = e;
+            }
+            return results;
+        }
+
+        @Override
+        protected void onPostExecute(FeatureResult results) {
+            String message = "No result comes back";
+
+            if (results != null) {
+                int size = (int) results.featureCount();
+                for (Object element : results) {
+                    dialog.incrementProgressBy(size / 100);
+                    if (element instanceof Feature) {
+                        Feature feature = (Feature) element;
+                        Graphic graphic = new Graphic(feature.getGeometry(),
+                                feature.getSymbol(), feature.getAttributes());
+                        graphicsLayer.addGraphic(graphic);
+                    }
+                }
+                message = String.valueOf(results.featureCount())
+                        + " results have returned from query.";
+
+            }
+            dialog.dismiss();
+            Toast toast = Toast.makeText(MainActivity.this, message,
+                    Toast.LENGTH_LONG);
+            toast.show();
+
+        }
     }
 }
