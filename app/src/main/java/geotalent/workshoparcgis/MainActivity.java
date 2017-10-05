@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.ProgressDialog;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.location.Location;
 import android.location.LocationListener;
@@ -58,6 +59,15 @@ import com.esri.core.tasks.na.StopGraphic;
 import com.esri.core.tasks.query.QueryParameters;
 import com.esri.core.tasks.query.QueryTask;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -92,8 +102,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     final SpatialReference epsg = SpatialReference.create(4269);
     private MenuItem menu_layer, menu_route, menu_delete, menu_accident, menu_census;
 
-    private View bsRoute, bsIdentify,bsCensus;
-    private BottomSheetBehavior bsbRoute, bsbIdentify,bsbCensus;
+    private View bsRoute, bsIdentify, bsCensus;
+    private BottomSheetBehavior bsbRoute, bsbIdentify, bsbCensus;
 
     /**
      * Route Activity
@@ -184,6 +194,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 try {
                     mRouteTask = RouteTask.createOnlineRouteTask(mapServiceMainString, null);
                     QueryDirections(pinStart, pinFinish);
+                    //Show information Data
                     mapView.setOnSingleTapListener(new OnSingleTapListener() {
                         @Override
                         public void onSingleTap(float x, float y) {
@@ -224,10 +235,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         mapView.unpause();
     }
 
+    /**save map state**/
     @Override
     public Object onRetainCustomNonConfigurationInstance() {
         return mapView.retainState();
-    } //save map state
+    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -245,6 +257,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public boolean onOptionsItemSelected(MenuItem item) {
         bsbRoute.setState(BottomSheetBehavior.STATE_HIDDEN);
         bsbIdentify.setState(BottomSheetBehavior.STATE_HIDDEN);
+        bsbCensus.setState(BottomSheetBehavior.STATE_HIDDEN);
         int id = item.getItemId();
         if (id == R.id.menu_accident) {
             if (menu_accident.isChecked()) {
@@ -281,7 +294,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
 
     private void updateActionBar() {
-        // Update the visible menu items to allow correctly switching maps.
         menu_layer.setVisible(lmain);
         menu_route.setVisible(lmain);
         menu_delete.setVisible(lroute);
@@ -309,6 +321,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         updateActionBar();
     }
 
+    /**Current Activity**/
     private void mainActivity() {
         if (myLocation == null) {
             LocationDisplayManager ldm = mapView.getLocationDisplayManager();
@@ -320,6 +333,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
+    /**Get Current Location**/
     private class MyLocationListener implements LocationListener {
 
         public MyLocationListener() {
@@ -356,6 +370,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         mapView.enableWrapAround(true);
     }
 
+    /**Permission GPS**/
     private void locationPermission() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             int lo = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION);
@@ -385,6 +400,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
+    /**Route Activity**/
     private void routeActivity() {
         fab.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
         fab.setColorFilter(WHITE);
@@ -401,6 +417,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         btmImg = (ImageView) findViewById(R.id.btmSheet_img);
     }
 
+    /**Query Route**/
     private void QueryDirections(final Point start, final Point end) {
         dialog = ProgressDialog.show(MainActivity.this, "Routing Sample",
                 "Calculating route...", true);
@@ -427,9 +444,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         t.start();
     }
 
+    /**Display Routing**/
     void updateUI() {
         dialog.dismiss();
-        ArrayList<String> curDirections = new ArrayList<>();
         if (mResults == null) {
             Toast.makeText(MainActivity.this, mException.toString(), Toast.LENGTH_LONG).show();
             return;
@@ -441,12 +458,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         routeLayer.removeAll();
         hiddenSegmentsLayer.removeAll();
         for (RouteDirection rd : curRoute.getRoutingDirections()) {
-            HashMap<String, Object> attribs = new HashMap<String, Object>();
+            HashMap<String, Object> attribs = new HashMap<>();
             attribs.put("text", rd.getText());
             attribs.put("time", Double.valueOf(rd.getMinutes()));
             attribs.put("length", Double.valueOf(rd.getLength()));
-            curDirections.add(String.format("%s%n%.1f minutes (%.1f miles)",
-                    rd.getText(), rd.getMinutes(), rd.getLength()));
             Graphic pinGraphic = new Graphic(((Polyline) rd.getGeometry()).getPoint(((Polyline) rd.getGeometry()).getPointCount() - 1), pinSymbol, attribs);
             Graphic routeGraphic = new Graphic(rd.getGeometry(), segmentHider, attribs);
             routeLayer.addGraphic(routeGraphic);
@@ -454,14 +469,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
         selectedSegmentID = -1;
         mapView.setExtent(curRoute.getEnvelope(), 10);
-
-        curDirections.remove(0);
-        curDirections.add(0, "My Location");
-
-        curDirections.remove(curDirections.size() - 1);
-        curDirections.add("Destination");
     }
 
+    /**Image Navigetion**/
     private int imgRoute(String txt) {
         if (txt.contains("Go") || txt.contains("Continue") || txt.contains("straight")) {
             return R.drawable.nav_straight;
@@ -486,12 +496,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         graphicsLayer.removeAll();
         graphicsLayer2.removeAll();
         routeLayer.removeAll();
-        start.setText(null);
-        finish.setText(null);
+        start.setText("Set Finish Location");
+        finish.setText("Set Start Location");
     }
 
     private IdentifyParameters params;
 
+
+    /**Accident Activity**/
     private void accidentActivity() {
         mapView.addLayer(accident);
         mapView.zoomToResolution(myLocation, 5.0);
@@ -500,7 +512,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         params.setLayerMode(IdentifyParameters.ALL_LAYERS);
         params.setLayers(new int[]{0});
         params.setTolerance(50);
-
+        //Show information Data
         mapView.setOnLongPressListener(new OnLongPressListener() {
             @Override
             public boolean onLongPress(float x, float y) {
@@ -524,6 +536,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         });
     }
 
+    /**GET Data form map service**/
     private class MyIdentifyTask extends AsyncTask<IdentifyParameters, Void, IdentifyResult[]> {
 
         IdentifyTask task = new IdentifyTask(mapServiceAccidentString);
@@ -598,6 +611,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Envelope envelope;
     private Geometry area, censusEnv;
 
+    /**Census Activity**/
     private void censusActiyity() {
         envelope = (Envelope) GeometryEngine.project(census.getFullExtent(), epsg, mapView.getSpatialReference());
         mapView.addLayer(graphicsLayer);
@@ -615,10 +629,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 return true;
             }
         });
+        //Show information Data
         mapView.setOnSingleTapListener(new OnSingleTapListener() {
             @Override
             public void onSingleTap(float x, float y) {
-                int[] indexes = graphicsLayer.getGraphicIDs(x,y,50);
+                int[] indexes = graphicsLayer.getGraphicIDs(x, y, 50);
+                pinPic = new PictureMarkerSymbol(getResources().getDrawable(R.drawable.ic_pin_drop_black_24dp));
                 graphicsLayer.updateGraphic(selectedSegmentID, pinPic);
                 if (indexes.length < 1) {
                     return;
@@ -627,17 +643,95 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Graphic selected = graphicsLayer.getGraphic(selectedSegmentID);
                 pinPic = new PictureMarkerSymbol(getResources().getDrawable(R.drawable.ic_pin_drop_orange_24dp));
                 graphicsLayer.updateGraphic(selectedSegmentID, pinPic);
-                ((TextView)findViewById(R.id.bsCensusHead)).setText(String.valueOf(selected.getAttributeValue("STATE_NAME")));
-                ((TextView)findViewById(R.id.btmSheet_SR)).setText(String.valueOf(selected.getAttributeValue("SUB_REGION")));
-                ((TextView)findViewById(R.id.btmSheet_SA)).setText(String.valueOf(selected.getAttributeValue("STATE_ABBR")));
-                ((TextView)findViewById(R.id.btmSheet_Area)).setText(String.valueOf(selected.getAttributeValue("SQMI")));
-                ((TextView)findViewById(R.id.btmSheet_FIPS)).setText(String.valueOf(selected.getAttributeValue("STATE_FIPS")));
+                ((TextView) findViewById(R.id.bsCensusHead)).setText(String.valueOf(selected.getAttributeValue("STATE_NAME")));
+                ((TextView) findViewById(R.id.btmSheet_SR)).setText(String.valueOf(selected.getAttributeValue("SUB_REGION")));
+                ((TextView) findViewById(R.id.btmSheet_SA)).setText(String.valueOf(selected.getAttributeValue("STATE_ABBR")));
+                ((TextView) findViewById(R.id.btmSheet_Area)).setText(String.valueOf(selected.getAttributeValue("SQMI")));
+                ((TextView) findViewById(R.id.btmSheet_FIPS)).setText(String.valueOf(selected.getAttributeValue("STATE_FIPS")));
                 bsbCensus.setPeekHeight(150);
                 bsbCensus.setState(BottomSheetBehavior.STATE_COLLAPSED);
+                imgTask tsk = new imgTask();
+                tsk.execute(String.valueOf(selected.getAttributeValue("STATE_ABBR")));
             }
         });
     }
 
+    /**Get Image form web service**/
+    private class imgTask extends AsyncTask<String, Void, String> implements loadImageTask.Listener {
+        String string_URL = "https://developers.geotalent.co.th/StateImages/media/get?stateAbbreviation=";
+
+        @Override
+        protected String doInBackground(String... string) {
+            string_URL = string_URL.concat(String.valueOf(string[0]));
+            String jsonString = jsonHttp.makeHttpRequest(string_URL);
+            return jsonString;
+        }
+
+        @Override
+        protected void onPostExecute(String jsonString) {
+            try {
+                JSONObject json = new JSONObject(jsonString);
+                String urlimg = (String) json.get("urlimage");
+                new loadImageTask(this).execute(urlimg);
+                Object a = null;
+            }catch (JSONException e){
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public void onImageLoaded(Bitmap bitmap) {
+            ((ImageView)findViewById(R.id.btmSheet_censusImg)).setImageBitmap(bitmap);
+        }
+
+        @Override
+        public void onError() {
+
+        }
+    }
+
+    /**get JSON from Server**/
+    private static class jsonHttp {
+
+        public static String makeHttpRequest(String url){
+            String strResult = "";
+
+            try {
+                URL u = new URL(url);
+                HttpURLConnection con = (HttpURLConnection) u.openConnection();
+                strResult = readStream(con.getInputStream());
+            }catch (Exception e) {
+                e.printStackTrace();
+            }
+            return strResult;
+        }
+
+        private static String readStream(InputStream in){
+
+            BufferedReader reader = null;
+            StringBuilder sb = new StringBuilder();
+            try {
+                reader = new BufferedReader(new InputStreamReader(in));
+                String line;
+                while ((line = reader.readLine())!= null){
+                    sb.append(line+"\n");
+                }
+            }catch (IOException e){
+                e.printStackTrace();
+            }finally {
+                if(reader != null){
+                    try {
+                        reader.close();
+                    }catch (IOException e){
+                        e.printStackTrace();
+                    }
+                }
+            }
+            return sb.toString();
+        }
+    }
+
+    /**GET Census Data**/
     private class QueryFeatureLayer extends AsyncTask<QueryParameters, Void, FeatureResult> {
 
         public QueryFeatureLayer() {
