@@ -1,7 +1,6 @@
 package geotalent.workshoparcgis;
 
 import android.Manifest;
-import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
@@ -31,7 +30,6 @@ import com.esri.android.map.ags.ArcGISFeatureLayer;
 import com.esri.android.map.ags.ArcGISTiledMapServiceLayer;
 import com.esri.android.map.event.OnLongPressListener;
 import com.esri.android.map.event.OnSingleTapListener;
-import com.esri.core.geodatabase.GeodatabaseFeatureTable;
 import com.esri.core.geometry.Envelope;
 import com.esri.core.geometry.Geometry;
 import com.esri.core.geometry.GeometryEngine;
@@ -41,14 +39,12 @@ import com.esri.core.geometry.Polygon;
 import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.SpatialReference;
 import com.esri.core.geometry.Unit;
-import com.esri.core.map.CallbackListener;
 import com.esri.core.map.Feature;
 import com.esri.core.map.FeatureResult;
 import com.esri.core.map.Graphic;
 import com.esri.core.symbol.PictureMarkerSymbol;
 import com.esri.core.symbol.SimpleLineSymbol;
 import com.esri.core.symbol.SimpleMarkerSymbol;
-import com.esri.core.tasks.ags.query.Query;
 import com.esri.core.tasks.identify.IdentifyParameters;
 import com.esri.core.tasks.identify.IdentifyResult;
 import com.esri.core.tasks.identify.IdentifyTask;
@@ -65,7 +61,6 @@ import com.esri.core.tasks.query.QueryTask;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Future;
 
 import static android.graphics.Color.*;
 
@@ -97,8 +92,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     final SpatialReference epsg = SpatialReference.create(4269);
     private MenuItem menu_layer, menu_route, menu_delete, menu_accident, menu_census;
 
-    private View bsRoute, bsIdentify;
-    private BottomSheetBehavior bsbRoute, bsbIdentify;
+    private View bsRoute, bsIdentify,bsCensus;
+    private BottomSheetBehavior bsbRoute, bsbIdentify,bsbCensus;
 
     /**
      * Route Activity
@@ -141,6 +136,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         bsIdentify = findViewById(R.id.bsIdentify);
         bsbIdentify = BottomSheetBehavior.from(bsIdentify);
         bsbIdentify.setState(BottomSheetBehavior.STATE_HIDDEN);
+        bsCensus = findViewById(R.id.bsCensus);
+        bsbCensus = BottomSheetBehavior.from(bsCensus);
+        bsbCensus.setState(BottomSheetBehavior.STATE_HIDDEN);
         routeLayout = (ConstraintLayout) findViewById(R.id.route_btn);
         accident = new ArcGISFeatureLayer(mapAccidentString, ArcGISFeatureLayer.MODE.ONDEMAND);
         census = new ArcGISFeatureLayer(mapCensusString, ArcGISFeatureLayer.MODE.ONDEMAND);
@@ -602,6 +600,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private void censusActiyity() {
         envelope = (Envelope) GeometryEngine.project(census.getFullExtent(), epsg, mapView.getSpatialReference());
+        mapView.addLayer(graphicsLayer);
         mapView.setExtent(envelope);
         mapView.setOnLongPressListener(new OnLongPressListener() {
             @Override
@@ -611,10 +610,30 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Polygon polygon = GeometryEngine.buffer(identifyPoint, mapView.getSpatialReference(), 100, kilometer);
                 area = GeometryEngine.intersect(envelope, polygon, mapView.getSpatialReference());
                 censusEnv = GeometryEngine.project(area, mapView.getSpatialReference(), epsg);
-                mapView.addLayer(graphicsLayer);
                 QueryFeatureLayer mTask = new QueryFeatureLayer();
                 mTask.execute();
                 return true;
+            }
+        });
+        mapView.setOnSingleTapListener(new OnSingleTapListener() {
+            @Override
+            public void onSingleTap(float x, float y) {
+                int[] indexes = graphicsLayer.getGraphicIDs(x,y,50);
+                graphicsLayer.updateGraphic(selectedSegmentID, pinPic);
+                if (indexes.length < 1) {
+                    return;
+                }
+                selectedSegmentID = indexes[0];
+                Graphic selected = graphicsLayer.getGraphic(selectedSegmentID);
+                pinPic = new PictureMarkerSymbol(getResources().getDrawable(R.drawable.ic_pin_drop_orange_24dp));
+                graphicsLayer.updateGraphic(selectedSegmentID, pinPic);
+                ((TextView)findViewById(R.id.bsCensusHead)).setText(String.valueOf(selected.getAttributeValue("STATE_NAME")));
+                ((TextView)findViewById(R.id.btmSheet_SR)).setText(String.valueOf(selected.getAttributeValue("SUB_REGION")));
+                ((TextView)findViewById(R.id.btmSheet_SA)).setText(String.valueOf(selected.getAttributeValue("STATE_ABBR")));
+                ((TextView)findViewById(R.id.btmSheet_Area)).setText(String.valueOf(selected.getAttributeValue("SQMI")));
+                ((TextView)findViewById(R.id.btmSheet_FIPS)).setText(String.valueOf(selected.getAttributeValue("STATE_FIPS")));
+                bsbCensus.setPeekHeight(150);
+                bsbCensus.setState(BottomSheetBehavior.STATE_COLLAPSED);
             }
         });
     }
@@ -659,8 +678,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     Feature feature = (Feature) element;
                     HashMap<String, Object> attribs = (HashMap<String, Object>) feature.getAttributes();
                     Point center = GeometryEngine.getLabelPointForPolygon((Polygon) feature.getGeometry(), mapView.getSpatialReference());
-                    Graphic pin = new Graphic(center, pinPic, attribs);
-                    graphicsLayer.addGraphic(pin);
+                    Graphic pinState = new Graphic(center, pinPic, attribs);
+                    graphicsLayer.addGraphic(pinState);
                 }
             }
             dialog.dismiss();
