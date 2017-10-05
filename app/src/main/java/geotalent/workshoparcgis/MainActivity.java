@@ -31,6 +31,7 @@ import com.esri.android.map.ags.ArcGISFeatureLayer;
 import com.esri.android.map.ags.ArcGISTiledMapServiceLayer;
 import com.esri.android.map.event.OnLongPressListener;
 import com.esri.android.map.event.OnSingleTapListener;
+import com.esri.core.geodatabase.GeodatabaseFeatureTable;
 import com.esri.core.geometry.Envelope;
 import com.esri.core.geometry.Geometry;
 import com.esri.core.geometry.GeometryEngine;
@@ -40,6 +41,7 @@ import com.esri.core.geometry.Polygon;
 import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.SpatialReference;
 import com.esri.core.geometry.Unit;
+import com.esri.core.map.CallbackListener;
 import com.esri.core.map.Feature;
 import com.esri.core.map.FeatureResult;
 import com.esri.core.map.Graphic;
@@ -63,6 +65,7 @@ import com.esri.core.tasks.query.QueryTask;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Future;
 
 import static android.graphics.Color.*;
 
@@ -593,38 +596,30 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    private IdentifyParameters qParams;
     private Point identifyPoint;
     private Envelope envelope;
-    private Geometry area,censusEnv;
+    private Geometry area, censusEnv;
 
     private void censusActiyity() {
         envelope = (Envelope) GeometryEngine.project(census.getFullExtent(), epsg, mapView.getSpatialReference());
-
-        qParams = new IdentifyParameters();
-        qParams.setDPI(98);
-        qParams.setLayerMode(IdentifyParameters.ALL_LAYERS);
-        qParams.setLayers(new int[]{0});
-        qParams.setTolerance(50);
-
         mapView.setExtent(envelope);
-        mapView.setOnSingleTapListener(new OnSingleTapListener() {
+        mapView.setOnLongPressListener(new OnLongPressListener() {
             @Override
-            public void onSingleTap(float x, float y) {
+            public boolean onLongPress(float x, float y) {
                 Unit kilometer = Unit.create(LinearUnit.Code.KILOMETER);
                 identifyPoint = mapView.toMapPoint(x, y);
-                Polygon a = GeometryEngine.buffer(identifyPoint, mapView.getSpatialReference(), 100, kilometer);
-                area = GeometryEngine.intersect(envelope,a,mapView.getSpatialReference());
-                censusEnv = GeometryEngine.project(area,mapView.getSpatialReference(),epsg);
-
+                Polygon polygon = GeometryEngine.buffer(identifyPoint, mapView.getSpatialReference(), 100, kilometer);
+                area = GeometryEngine.intersect(envelope, polygon, mapView.getSpatialReference());
+                censusEnv = GeometryEngine.project(area, mapView.getSpatialReference(), epsg);
+                mapView.addLayer(graphicsLayer);
                 QueryFeatureLayer mTask = new QueryFeatureLayer();
                 mTask.execute();
-
+                return true;
             }
         });
     }
 
-    private class QueryFeatureLayer extends AsyncTask<String, Void, FeatureResult> {
+    private class QueryFeatureLayer extends AsyncTask<QueryParameters, Void, FeatureResult> {
 
         public QueryFeatureLayer() {
         }
@@ -635,49 +630,40 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
 
         @Override
-        protected FeatureResult doInBackground(String... params) {
+        protected FeatureResult doInBackground(QueryParameters... params) {
 
             QueryParameters mParams = new QueryParameters();
             mParams.setGeometry(censusEnv);
             mParams.setReturnGeometry(true);
-            mParams.setOutSpatialReference(egs);
+            mParams.setInSpatialReference(epsg);
+            mParams.setOutSpatialReference(wm);
+            mParams.setOutFields(new String[]{"STATE_NAME", "SUB_REGION", "STATE_ABBR", "SQMI", "STATE_FIPS"});
 
             QueryTask queryTask = new QueryTask(mapCensusString);
             FeatureResult results = null;
 
             try {
                 results = queryTask.execute(mParams);
-                return results;
             } catch (Exception e) {
-                Object a = e;
+                e.printStackTrace();
             }
             return results;
         }
 
         @Override
         protected void onPostExecute(FeatureResult results) {
-            String message = "No result comes back";
-
+            pinPic = new PictureMarkerSymbol(getResources().getDrawable(R.drawable.ic_pin_drop_black_24dp));
+            graphicsLayer.removeAll();
             if (results != null) {
-                int size = (int) results.featureCount();
                 for (Object element : results) {
-                    dialog.incrementProgressBy(size / 100);
-                    if (element instanceof Feature) {
-                        Feature feature = (Feature) element;
-                        Graphic graphic = new Graphic(feature.getGeometry(),
-                                feature.getSymbol(), feature.getAttributes());
-                        graphicsLayer.addGraphic(graphic);
-                    }
+                    Feature feature = (Feature) element;
+                    HashMap<String, Object> attribs = (HashMap<String, Object>) feature.getAttributes();
+                    Point center = GeometryEngine.getLabelPointForPolygon((Polygon) feature.getGeometry(), mapView.getSpatialReference());
+                    Graphic pin = new Graphic(center, pinPic, attribs);
+                    graphicsLayer.addGraphic(pin);
                 }
-                message = String.valueOf(results.featureCount())
-                        + " results have returned from query.";
-
             }
             dialog.dismiss();
-            Toast toast = Toast.makeText(MainActivity.this, message,
-                    Toast.LENGTH_LONG);
-            toast.show();
-
         }
     }
 }
